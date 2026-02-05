@@ -1094,6 +1094,7 @@ body::after {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  align-items: flex-start;
 }
 
 .json-key {
@@ -1115,6 +1116,18 @@ body::after {
   color: var(--ink);
   white-space: pre-wrap;
   word-break: break-word;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+  transition: background 0.2s ease;
+}
+
+.json-value:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.json-value.is-markdown p {
+  margin: 0;
 }
 
 .json-string {

@@ -168,6 +168,19 @@ function setMarkdown(el, text, mode = "inline") {
   el.classList.toggle("md-inline", mode === "inline");
 }
 
+function guessMarkdownMode(text) {
+  if (!text) {
+    return "inline";
+  }
+  if (/\r?\n/.test(text)) {
+    return "block";
+  }
+  if (/^\s*(#{1,3}\s+|[-*]\s+|\d+\.\s+)/m.test(text)) {
+    return "block";
+  }
+  return "inline";
+}
+
 function truncateText(text, max = 80) {
   const trimmed = text.trim();
   if (trimmed.length <= max) {
@@ -193,9 +206,28 @@ function stripLeadingTimestamp(text) {
     .trim();
 }
 
+function extractMessageId(text) {
+  if (!text) {
+    return "";
+  }
+  const matches = text.match(/\[message_id:\s*([^\]]+)\]/gi);
+  if (!matches || matches.length === 0) {
+    return "";
+  }
+  const last = matches[matches.length - 1] || "";
+  const id = last.replace(/\[message_id:\s*([^\]]+)\]/i, "$1").trim();
+  return id;
+}
+
+function stripMessageId(text) {
+  return text.replace(/\s*\[message_id:\s*[^\]]+\]\s*$/i, "").trim();
+}
+
 function taskDisplayTitle(task, max = 80) {
   const base = task.userMessage || task.taskId || "";
-  return truncateText(stripLeadingTimestamp(base), max);
+  const noTime = stripLeadingTimestamp(base);
+  const noId = stripMessageId(noTime);
+  return truncateText(noId, max);
 }
 
 function getTaskRange(task) {
@@ -350,7 +382,26 @@ function createJsonLeaf(key, value) {
   const type = getJsonType(value);
   const valueSpan = document.createElement("span");
   valueSpan.className = `json-value json-${type}`;
-  valueSpan.textContent = formatJsonValue(value);
+  const formatted = formatJsonValue(value);
+  const rawText = typeof value === "string" ? value : formatted;
+  valueSpan.textContent = formatted;
+  valueSpan.dataset.raw = rawText;
+  valueSpan.dataset.formatted = formatted;
+  valueSpan.dataset.mode = "plain";
+  valueSpan.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const mode = valueSpan.dataset.mode || "plain";
+    if (mode === "markdown") {
+      valueSpan.textContent = formatted;
+      valueSpan.dataset.mode = "plain";
+      valueSpan.classList.remove("is-markdown", "md-inline", "md-block");
+      return;
+    }
+    const displayMode = guessMarkdownMode(rawText);
+    setMarkdown(valueSpan, rawText, displayMode);
+    valueSpan.dataset.mode = "markdown";
+    valueSpan.classList.add("is-markdown");
+  });
   row.appendChild(valueSpan);
 
   return row;
