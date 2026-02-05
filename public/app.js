@@ -177,9 +177,17 @@ function truncateText(text, max = 80) {
 }
 
 function stripLeadingTimestamp(text) {
-  return text
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return "";
+  }
+  const bracketed = trimmed.match(/^\s*\[[^\]]+\]\s*(.*)$/s);
+  if (bracketed?.[1]) {
+    return bracketed[1].trim();
+  }
+  return trimmed
     .replace(
-      /^\s*\[?\(?\d{4}(?:-|\/)\d{1,2}(?:-|\/)\d{1,2}(?:(?:\s|T)\d{1,2}:\d{2}(?::\d{2})?)?\)?\]?\s*(?:-|:|\|)\s*/i,
+      /^\s*\[?\(?\d{4}(?:-|\/)\d{1,2}(?:-|\/)\d{1,2}(?:(?:\s|T)\d{1,2}:\d{2}(?::\d{2})?)?(?:\s*[A-Z+:-]{2,6})?\)?\]?\s*(?:-|:|\|)\s*/i,
       "",
     )
     .trim();
