@@ -9,7 +9,7 @@ const state = {
   selectedTaskIds: new Set(),
   activeTaskId: null,
   focusedTaskId: null,
-  detailTab: "task",
+  mainView: "task",
   analysesByTask: new Map(),
   analysesLoaded: false,
   filters: new Set([
@@ -37,7 +37,12 @@ const searchEl = document.getElementById("search");
 const detailTitleEl = document.getElementById("detail-title");
 const detailSubtitleEl = document.getElementById("detail-subtitle");
 const detailBodyEl = document.getElementById("detail-body");
-const detailTabs = Array.from(document.querySelectorAll(".detail-tab"));
+const evolutionContentEl = document.getElementById("evolution-content");
+const evolutionSubtitleEl = document.getElementById("evolution-subtitle");
+const viewTabs = Array.from(document.querySelectorAll(".view-tab"));
+const taskViewEl = document.getElementById("task-view");
+const evolutionViewEl = document.getElementById("evolution-view");
+const mainEl = document.querySelector(".main");
 
 const SELECTED_TASKS_KEY = "emc_selected_tasks";
 
@@ -129,14 +134,29 @@ function focusTask(task) {
     renderTimeline();
     renderDetailPanel();
   }
+  renderEvolutionView();
 }
 
-function setDetailTab(tab) {
-  state.detailTab = tab;
-  detailTabs.forEach((btn) => {
-    btn.classList.toggle("active", btn.getAttribute("data-tab") === tab);
+function setMainView(view) {
+  state.mainView = view;
+  viewTabs.forEach((btn) => {
+    btn.classList.toggle("active", btn.getAttribute("data-view") === view);
   });
-  renderDetailPanel();
+  if (taskViewEl) {
+    taskViewEl.classList.toggle("active", view === "task");
+  }
+  if (evolutionViewEl) {
+    evolutionViewEl.classList.toggle("active", view === "evolution");
+  }
+  if (mainEl) {
+    mainEl.setAttribute("data-view", view);
+  }
+  if (view === "evolution") {
+    renderEvolutionView();
+  } else {
+    renderTimeline();
+    renderDetailPanel();
+  }
 }
 
 function loadSelectedTaskIds() {
@@ -399,6 +419,7 @@ function renderSessions() {
           }
           persistSelectedTaskIds();
           renderDetailPanel();
+          renderEvolutionView();
         });
 
         const info = document.createElement("div");
@@ -448,6 +469,9 @@ function toggleSessionExpanded(sessionKey) {
 }
 
 function renderDetailPanel() {
+  if (state.mainView !== "task") {
+    return;
+  }
   detailBodyEl.innerHTML = "";
   const selectedTasks = getSelectedTasks();
   const selectedCount = selectedTasks.length;
@@ -458,7 +482,7 @@ function renderDetailPanel() {
     state.activeTaskId = activeTask.taskId;
   }
 
-  detailTitleEl.textContent = state.detailTab === "task" ? "Task Detail" : "Evolution";
+  detailTitleEl.textContent = "Task Detail";
   detailSubtitleEl.textContent = selectedCount
     ? `${selectedCount} task${selectedCount > 1 ? "s" : ""} selected`
     : "No tasks selected";
@@ -468,12 +492,7 @@ function renderDetailPanel() {
     return;
   }
 
-  if (state.detailTab === "task") {
-    renderTaskDetail(selectedTasks, activeTask);
-    return;
-  }
-
-  renderEvolutionDetail(selectedTasks);
+  renderTaskDetail(selectedTasks, activeTask);
 }
 
 function renderTaskDetail(selectedTasks, activeTask) {
@@ -620,14 +639,27 @@ function renderTaskDetail(selectedTasks, activeTask) {
   }
 }
 
-function renderEvolutionDetail(selectedTasks) {
+function renderEvolutionView() {
+  if (!evolutionContentEl) {
+    return;
+  }
+  evolutionContentEl.innerHTML = "";
+  const selectedTasks = getSelectedTasks();
+  const selectedCount = selectedTasks.length;
+
+  if (evolutionSubtitleEl) {
+    evolutionSubtitleEl.textContent = selectedCount
+      ? `${selectedCount} task${selectedCount > 1 ? "s" : ""} selected`
+      : "No tasks selected";
+  }
+
   if (!selectedTasks.length) {
-    detailBodyEl.appendChild(createEmptyState("Select tasks to view evolution analysis."));
+    evolutionContentEl.appendChild(createEmptyState("Select tasks to view evolution analysis."));
     return;
   }
 
   if (!state.analysesLoaded) {
-    detailBodyEl.appendChild(createEmptyState("Loading evolution analysis..."));
+    evolutionContentEl.appendChild(createEmptyState("Loading evolution analysis..."));
     return;
   }
 
@@ -760,10 +792,13 @@ function renderEvolutionDetail(selectedTasks) {
     container.appendChild(card);
   });
 
-  detailBodyEl.appendChild(container);
+  evolutionContentEl.appendChild(container);
 }
 
 function renderTimeline() {
+  if (state.mainView !== "task") {
+    return;
+  }
   timelineEl.innerHTML = "";
   if (!state.activeSessionKey) {
     timelineEl.appendChild(createEmptyState("Select a session to load its timeline"));
@@ -904,9 +939,11 @@ async function loadTasks() {
     renderSessions();
     updateActiveSessionCard();
     renderDetailPanel();
+    renderEvolutionView();
   } catch {
     state.tasksLoaded = true;
     renderSessions();
+    renderEvolutionView();
   }
 }
 
@@ -923,10 +960,10 @@ async function loadAnalyses() {
     });
     state.analysesByTask = byTask;
     state.analysesLoaded = true;
-    renderDetailPanel();
+    renderEvolutionView();
   } catch {
     state.analysesLoaded = true;
-    renderDetailPanel();
+    renderEvolutionView();
   }
 }
 
@@ -972,14 +1009,18 @@ searchEl.addEventListener("input", (event) => {
   renderTimeline();
 });
 
-detailTabs.forEach((tab) => {
+viewTabs.forEach((tab) => {
   tab.addEventListener("click", () => {
-    const key = tab.getAttribute("data-tab");
+    const key = tab.getAttribute("data-view");
     if (key === "task" || key === "evolution") {
-      setDetailTab(key);
+      setMainView(key);
     }
   });
 });
+
+if (mainEl) {
+  mainEl.setAttribute("data-view", state.mainView);
+}
 
 wireFilters();
 loadSessions();
