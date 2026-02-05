@@ -6,6 +6,7 @@ import { loadSubagentRuns, subagentRunsToEvents } from "../ingest/subagents.js";
 import { capturedEventsToTimeline, loadCapturedAgentEvents } from "../ingest/agent-events.js";
 import { resolveOpenClawStateDir } from "../paths.js";
 import { loadTaskRecords, type TaskRecord } from "../tasks/task-store.js";
+import { loadAnalysisRecords, type TaskAnalysisRecord } from "../tasks/analysis-store.js";
 
 const transcriptCache = new Map<string, { mtimeMs: number; events: TimelineEvent[] }>();
 
@@ -69,4 +70,17 @@ export async function getTasks(params?: {
   const sessionKey = params?.sessionKey?.trim();
   const filtered = sessionKey ? tasks.filter((task) => task.sessionKey === sessionKey) : tasks;
   return filtered.sort((a, b) => a.startTs - b.startTs);
+}
+
+export async function getAnalyses(params?: {
+  stateDir?: string;
+  taskIds?: string[];
+}): Promise<TaskAnalysisRecord[]> {
+  const stateDir = params?.stateDir ?? resolveOpenClawStateDir();
+  const records = await loadAnalysisRecords(stateDir);
+  if (!params?.taskIds || params.taskIds.length === 0) {
+    return records;
+  }
+  const ids = new Set(params.taskIds);
+  return records.filter((record) => ids.has(record.taskId));
 }

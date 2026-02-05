@@ -67,3 +67,30 @@ export function appendAnalysisRecords(
   fs.appendFileSync(filePath, lines, "utf8");
   return records.length;
 }
+
+export async function loadAnalysisRecords(
+  stateDir = resolveOpenClawStateDir(),
+): Promise<TaskAnalysisRecord[]> {
+  const filePath = resolveAnalysisPath(stateDir);
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+  const records: TaskAnalysisRecord[] = [];
+  const stream = fs.createReadStream(filePath, { encoding: "utf8" });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(trimmed) as TaskAnalysisRecord;
+      if (parsed?.taskId) {
+        records.push(parsed);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return records;
+}
