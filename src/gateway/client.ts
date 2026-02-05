@@ -36,6 +36,7 @@ export type GatewayCaptureOptions = {
   token?: string;
   password?: string;
   stateDir?: string;
+  caps?: string[];
   onEvent?: (evt: GatewayEventFrame) => void;
   onHello?: (hello: GatewayHelloOk) => void;
   onError?: (err: Error) => void;
@@ -45,6 +46,7 @@ export type GatewayCaptureOptions = {
 type Pending = {
   resolve: (value: unknown) => void;
   reject: (err: Error) => void;
+  expectFinal: boolean;
 };
 
 export class GatewayCaptureClient {
@@ -123,7 +125,7 @@ export class GatewayCaptureClient {
         platform: process.platform,
         mode: "backend",
       },
-      caps: ["tool-events"],
+      caps: this.opts.caps ?? [],
       role,
       scopes,
       device: {
@@ -171,6 +173,10 @@ export class GatewayCaptureClient {
       if (!pending) {
         return;
       }
+      const payload = res.payload as { status?: unknown } | undefined;
+      if (pending.expectFinal && payload?.status === "accepted") {
+        return;
+      }
       this.pending.delete(res.id);
       if (res.ok) {
         pending.resolve(res.payload);
@@ -181,14 +187,18 @@ export class GatewayCaptureClient {
     }
   }
 
-  request<T = unknown>(method: string, params?: unknown): Promise<T> {
+  request<T = unknown>(method: string, params?: unknown, opts?: { expectFinal?: boolean }): Promise<T> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("gateway not connected"));
     }
     const id = crypto.randomUUID();
     const frame = { type: "req", id, method, params };
     const p = new Promise<T>((resolve, reject) => {
-      this.pending.set(id, { resolve: (value) => resolve(value as T), reject });
+      this.pending.set(id, {
+        resolve: (value) => resolve(value as T),
+        reject,
+        expectFinal: opts?.expectFinal === true,
+      });
     });
     this.ws.send(JSON.stringify(frame));
     return p;

@@ -75,8 +75,30 @@ node dist/cli.js parse
 ```json
 {
   "excludeAgentIds": ["evolver"],
-  "excludeTools": ["message/send", "message/thread-reply"]
+  "excludeTools": ["message/send", "message/thread-reply"],
+  "analysisAgentId": "evolver",
+  "analysisTimeoutSeconds": 120
 }
+```
+
+## 分析任务（可选）
+
+使用 OpenClaw agent 对任务候选进行 LLM 分析，追加写入：
+
+```
+~/.openclaw/evolve-my-claw/tasks.analysis.jsonl
+```
+
+启动方式：
+
+```bash
+node dist/cli.js analyze --agent evolver
+```
+
+如果 gateway 需要认证：
+
+```bash
+node dist/cli.js analyze --agent evolver --token <gateway-token>
 ```
 
 ## 常见参数

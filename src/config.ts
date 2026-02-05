@@ -5,11 +5,15 @@ import { resolveOpenClawStateDir, resolveTelemetryDir } from "./paths.js";
 export type EvolveConfig = {
   excludeAgentIds: string[];
   excludeTools: string[];
+  analysisAgentId: string;
+  analysisTimeoutSeconds: number;
 };
 
 const DEFAULT_CONFIG: EvolveConfig = {
   excludeAgentIds: ["evolver"],
   excludeTools: ["message/send", "message/thread-reply"],
+  analysisAgentId: "evolver",
+  analysisTimeoutSeconds: 120,
 };
 
 function normalizeList(value: unknown, fallback: string[]): string[] {
@@ -42,9 +46,16 @@ export function loadConfig(params?: { stateDir?: string; configPath?: string }):
   try {
     const raw = fs.readFileSync(configPath, "utf8");
     const parsed = JSON.parse(raw) as Partial<EvolveConfig>;
+    const timeoutRaw = Number(parsed.analysisTimeoutSeconds);
+    const timeout = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? Math.floor(timeoutRaw) : undefined;
     return {
       excludeAgentIds: normalizeList(parsed.excludeAgentIds, DEFAULT_CONFIG.excludeAgentIds),
       excludeTools: normalizeList(parsed.excludeTools, DEFAULT_CONFIG.excludeTools),
+      analysisAgentId:
+        typeof parsed.analysisAgentId === "string" && parsed.analysisAgentId.trim()
+          ? parsed.analysisAgentId.trim()
+          : DEFAULT_CONFIG.analysisAgentId,
+      analysisTimeoutSeconds: timeout ?? DEFAULT_CONFIG.analysisTimeoutSeconds,
     };
   } catch {
     return { ...DEFAULT_CONFIG };

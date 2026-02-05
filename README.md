@@ -57,8 +57,28 @@ Example:
 ```json
 {
   "excludeAgentIds": ["evolver"],
-  "excludeTools": ["message/send", "message/thread-reply"]
+  "excludeTools": ["message/send", "message/thread-reply"],
+  "analysisAgentId": "evolver",
+  "analysisTimeoutSeconds": 120
 }
+```
+
+## Analyze tasks with OpenClaw (optional)
+
+```bash
+node dist/cli.js analyze --agent evolver
+```
+
+This appends analysis records to:
+
+```
+~/.openclaw/evolve-my-claw/tasks.analysis.jsonl
+```
+
+If the gateway requires auth:
+
+```bash
+node dist/cli.js analyze --agent evolver --token <gateway-token>
 ```
 
 ## Notes
@@ -71,6 +91,7 @@ Example:
 - `emc serve`: start the local UI server
 - `emc capture`: capture gateway agent events to JSONL
 - `emc parse`: build task candidates and append to tasks.jsonl
+- `emc analyze`: analyze task candidates and append tasks.analysis.jsonl
 
 ## Agent install note
 

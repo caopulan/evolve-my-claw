@@ -9,6 +9,31 @@ export function resolveTaskStorePath(stateDir = resolveOpenClawStateDir()): stri
   return `${resolveTelemetryDir(stateDir)}/tasks.jsonl`;
 }
 
+export async function loadTaskRecords(stateDir = resolveOpenClawStateDir()): Promise<TaskRecord[]> {
+  const filePath = resolveTaskStorePath(stateDir);
+  if (!fs.existsSync(filePath)) {
+    return [];
+  }
+  const records: TaskRecord[] = [];
+  const stream = fs.createReadStream(filePath, { encoding: "utf8" });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(trimmed) as TaskRecord;
+      if (parsed?.taskId) {
+        records.push(parsed);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return records;
+}
+
 export async function loadTaskIndex(stateDir = resolveOpenClawStateDir()): Promise<Set<string>> {
   const filePath = resolveTaskStorePath(stateDir);
   if (!fs.existsSync(filePath)) {
