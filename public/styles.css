@@ -573,6 +573,7 @@ body::after {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  height: 100%;
 }
 
 .timeline-toolbar {
@@ -723,7 +724,7 @@ body::after {
   display: grid;
   grid-template-columns: minmax(0, 4fr) minmax(320px, 6fr);
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
   flex: 1;
   min-height: 0;
 }
