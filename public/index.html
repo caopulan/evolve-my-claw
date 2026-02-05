@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Evolve My Claw</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="sidebar">
+        <div class="sidebar-header">
+          <h1>Evolve My Claw</h1>
+          <p>OpenClaw timeline explorer</p>
+        </div>
+        <div class="sidebar-section">
+          <h2>Sessions</h2>
+          <div id="sessions" class="session-list"></div>
+        </div>
+      </aside>
+      <main class="main">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <h2 id="session-title">Select a session</h2>
+            <p id="session-subtitle" class="muted"></p>
+          </div>
+          <div class="toolbar-right">
+            <input id="search" type="search" placeholder="Search timeline" />
+          </div>
+        </div>
+        <div class="filters">
+          <label><input type="checkbox" data-kind="user_message" checked /> User</label>
+          <label><input type="checkbox" data-kind="assistant_message" /> Assistant</label>
+          <label><input type="checkbox" data-kind="tool" checked /> Tools</label>
+          <label><input type="checkbox" data-kind="subagent_run" checked /> Subagents</label>
+          <label><input type="checkbox" data-kind="compaction" checked /> Compaction</label>
+          <label><input type="checkbox" data-kind="agent_event" checked /> Agent events</label>
+          <label><input type="checkbox" data-kind="model_change" checked /> Model</label>
+          <label><input type="checkbox" data-kind="thinking_level_change" checked /> Thinking</label>
+          <label><input type="checkbox" data-kind="session_info" checked /> Session info</label>
+        </div>
+        <div id="timeline" class="timeline"></div>
+      </main>
+    </div>
+    <script src="/app.js"></script>
+  </body>
+</html>

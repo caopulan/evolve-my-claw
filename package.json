@@ -1,0 +1,29 @@
+{
+  "name": "evolve-my-claw",
+  "version": "0.1.0",
+  "description": "External timeline + evolution tooling for OpenClaw sessions",
+  "type": "module",
+  "bin": {
+    "emc": "dist/cli.js"
+  },
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc",
+    "start": "node dist/cli.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@fastify/static": "^7.0.0",
+    "commander": "^12.1.0",
+    "fastify": "^4.28.1",
+    "json5": "^2.2.3",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
