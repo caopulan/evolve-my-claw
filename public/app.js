@@ -33,6 +33,7 @@ const state = {
   evolutionRunning: false,
   evolutionDimensions: new Set(["per_task_tool_quality", "cross_task_patterns"]),
   evolutionChangeTargets: new Set(["openclaw_config", "agent_persona", "hooks", "plugins", "skills"]),
+  evolutionUseSearch: false,
   evolutionNotice: "",
   applyingChanges: new Set(),
   appliedChanges: new Set(),
@@ -60,6 +61,7 @@ const SELECTED_TASKS_KEY = "emc_selected_tasks";
 const EVOLUTION_DIMENSIONS_KEY = "emc_evolution_dimensions";
 const EVOLUTION_CHANGE_TARGETS_KEY = "emc_evolution_change_targets";
 const EVOLUTION_APPLIED_CHANGES_KEY = "emc_evolution_applied_changes";
+const EVOLUTION_USE_SEARCH_KEY = "emc_evolution_use_search";
 
 function formatTime(ts) {
   const date = new Date(ts);
@@ -424,6 +426,32 @@ function pruneSelectedTaskIds() {
   }
 }
 
+function loadBoolean(key, fallback = false) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) {
+      return fallback;
+    }
+    if (raw === "true") {
+      return true;
+    }
+    if (raw === "false") {
+      return false;
+    }
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
+function persistBoolean(key, value) {
+  try {
+    localStorage.setItem(key, value ? "true" : "false");
+  } catch {
+    // ignore
+  }
+}
+
 function loadStringSet(key, fallback = []) {
   try {
     const raw = localStorage.getItem(key);
@@ -460,6 +488,7 @@ state.evolutionChangeTargets = loadStringSet(EVOLUTION_CHANGE_TARGETS_KEY, [
   "plugins",
   "skills",
 ]);
+state.evolutionUseSearch = loadBoolean(EVOLUTION_USE_SEARCH_KEY, false);
 state.appliedChanges = loadStringSet(EVOLUTION_APPLIED_CHANGES_KEY, []);
 
 function formatJsonValue(value) {
@@ -957,6 +986,28 @@ function renderEvolutionView() {
   });
   controls.appendChild(targetSection);
 
+  const optionSection = document.createElement("div");
+  optionSection.className = "evolution-section";
+  const optionTitle = document.createElement("div");
+  optionTitle.className = "evolution-section-title";
+  optionTitle.textContent = "Options";
+  optionSection.appendChild(optionTitle);
+  const searchLabel = document.createElement("label");
+  searchLabel.className = "evolution-option";
+  const searchToggle = document.createElement("input");
+  searchToggle.type = "checkbox";
+  searchToggle.checked = state.evolutionUseSearch;
+  searchToggle.addEventListener("change", () => {
+    state.evolutionUseSearch = searchToggle.checked;
+    persistBoolean(EVOLUTION_USE_SEARCH_KEY, state.evolutionUseSearch);
+  });
+  const searchSpan = document.createElement("span");
+  searchSpan.textContent = "Search for solutions (web/X)";
+  searchLabel.appendChild(searchToggle);
+  searchLabel.appendChild(searchSpan);
+  optionSection.appendChild(searchLabel);
+  controls.appendChild(optionSection);
+
   const actionSection = document.createElement("div");
   actionSection.className = "evolution-section evolution-action";
   const runButton = document.createElement("button");
@@ -1404,7 +1455,7 @@ async function runEvolutionAnalysis() {
     const res = await fetch("/api/evolution/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ taskIds, dimensions, changeTargets }),
+      body: JSON.stringify({ taskIds, dimensions, changeTargets, useSearch: state.evolutionUseSearch }),
     });
     const data = await res.json();
     if (!res.ok) {

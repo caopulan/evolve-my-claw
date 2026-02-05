@@ -96,6 +96,7 @@ function buildPrompt(params: {
   workspacePaths: Array<{ agentId: string; path: string }>;
   hooksDir: string;
   skillsDir: string;
+  useSearch: boolean;
 }): string {
   const taskBlocks = params.tasks.map((task) => buildTaskBlock(task));
   const tasksSection = taskBlocks.length > 0 ? taskBlocks.join("\n\n---\n\n") : "none";
@@ -141,13 +142,16 @@ function buildPrompt(params: {
     "要求：",
     "- 只分析指定任务，不要引入其他任务。",
     "- 仅输出与选择的维度相关的分析。",
-    "- 如果没有明确收益，不要强行给出修改建议。",
+    "- 只输出包含 solution 的条目；solution 必须是 recommendation（非空）或 changes（至少一条）。",
+    "- 没有 solution 的问题不要输出为条目。",
     "- changes 必须可执行，给出明确原因与修改内容。",
     "- openclaw_config_merge_patch 的 patch 只能包含顶层键：agents, bindings, tools, session, plugins, hooks, skills。",
     "- 文件修改必须使用 target.path 指向绝对路径，并且路径必须在允许范围内。",
+    "- 如果 USE_SEARCH=true，必须至少使用一次 sessions_spawn 调用子代理检索 web 或 X/Twitter 方案；找到可行方案再写入 recommendation，并注明来源；找不到就不必提及。",
     "",
     `SELECTED_DIMENSIONS: ${params.dimensions.join(", ") || "none"}`,
     `CHANGE_TARGETS: ${params.changeTargets.join(", ") || "none"}`,
+    `USE_SEARCH: ${params.useSearch ? "true" : "false"}`,
     `OPENCLAW_CONFIG: ${params.openclawConfigPath}`,
     "WORKSPACES:",
     workspaceLines,
@@ -221,6 +225,7 @@ export async function analyzeEvolutionReport(params: {
   timeoutSeconds: number;
   dimensions: EvolutionDimension[];
   changeTargets: EvolutionChangeTarget[];
+  useSearch: boolean;
   allowedPaths: string[];
   openclawConfigPath: string;
   workspacePaths: Array<{ agentId: string; path: string }>;
@@ -236,6 +241,7 @@ export async function analyzeEvolutionReport(params: {
     workspacePaths: params.workspacePaths,
     hooksDir: params.hooksDir,
     skillsDir: params.skillsDir,
+    useSearch: params.useSearch,
   });
   const idempotencyKey = crypto.randomUUID();
 
@@ -246,7 +252,9 @@ export async function analyzeEvolutionReport(params: {
       agentId: params.analysisAgentId,
       deliver: false,
       timeout: params.timeoutSeconds,
-      extraSystemPrompt: "Only respond with JSON. Do not use tools. Do not include Markdown or code fences.",
+      extraSystemPrompt: params.useSearch
+        ? "Only respond with JSON. Use tools when USE_SEARCH=true and call sessions_spawn at least once. Do not include Markdown or code fences."
+        : "Only respond with JSON. Do not use tools. Do not include Markdown or code fences.",
       idempotencyKey,
       label: "Evolve Report",
     },
@@ -256,6 +264,20 @@ export async function analyzeEvolutionReport(params: {
   const rawText = extractAgentText(response);
   const parsed = parseEvolutionReport(rawText);
 
+  const items = parsed.items ? safeCastItems(parsed.items) : [];
+  const actionableItems = items.filter((item) => {
+    const recommendationValue = (item as { recommendation?: unknown }).recommendation;
+    const recommendation =
+      typeof recommendationValue === "string" && recommendationValue.trim().length > 0;
+    const changeValue = (item as { changes?: unknown }).changes;
+    const changes = Array.isArray(changeValue) ? changeValue.length > 0 : false;
+    return recommendation || changes;
+  });
+  const summary =
+    actionableItems.length > 0
+      ? parsed.summary ?? "analysis failed"
+      : "未找到可执行的解决方案";
+
   return {
     type: "evolution_report",
     reportId: `evolution-${Date.now()}-${crypto.randomUUID()}`,
@@ -264,8 +286,8 @@ export async function analyzeEvolutionReport(params: {
     taskIds: params.tasks.map((task) => task.taskId),
     dimensions: params.dimensions,
     changeTargets: params.changeTargets,
-    summary: parsed.summary ?? "analysis failed",
-    items: parsed.items ? safeCastItems(parsed.items) : [],
+    summary,
+    items: actionableItems,
     rawResponse: rawText ? truncateText(rawText, MAX_RAW_RESPONSE_CHARS) : undefined,
     parseError: parsed.error,
   };

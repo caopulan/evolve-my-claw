@@ -72,6 +72,7 @@ export async function startServer(params: {
       taskIds?: string[];
       dimensions?: string[];
       changeTargets?: string[];
+      useSearch?: boolean;
     };
     const taskIds = Array.isArray(body?.taskIds)
       ? body.taskIds.filter((id) => typeof id === "string" && id.trim()).map((id) => id.trim())
@@ -91,6 +92,7 @@ export async function startServer(params: {
       return { error: "changeTargets required" };
     }
 
+    const useSearch = body?.useSearch === true;
     try {
       const report = await runEvolutionAnalysis({
         stateDir: params.stateDir,
@@ -98,6 +100,7 @@ export async function startServer(params: {
         dimensions,
         changeTargets,
         analysisAgentId: EVOLUTION_AGENT_ID,
+        useSearch,
       });
       return { report };
     } catch (err) {

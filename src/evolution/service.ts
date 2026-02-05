@@ -125,6 +125,7 @@ export async function runEvolutionAnalysis(params: {
   dimensions: EvolutionDimension[];
   changeTargets: EvolutionChangeTarget[];
   analysisAgentId: string;
+  useSearch?: boolean;
 }): Promise<EvolutionReportRecord> {
   const stateDir = params.stateDir ?? resolveOpenClawStateDir();
   const evolveConfigPath = params.evolveConfigPath ? path.resolve(params.evolveConfigPath) : undefined;
@@ -175,6 +176,7 @@ export async function runEvolutionAnalysis(params: {
       timeoutSeconds,
       dimensions: params.dimensions,
       changeTargets: params.changeTargets,
+      useSearch: params.useSearch ?? false,
       allowedPaths,
       openclawConfigPath,
       workspacePaths,
