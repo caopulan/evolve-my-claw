@@ -4,40 +4,89 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Evolve My Claw</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Chakra+Petch:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <div class="app">
       <aside class="sidebar">
         <div class="sidebar-header">
-          <h1>Evolve My Claw</h1>
-          <p>OpenClaw timeline explorer</p>
+          <div class="brand">
+            <div class="brand-mark">EMC</div>
+            <div class="brand-text">
+              <h1>Evolve My Claw</h1>
+              <p>OpenClaw signal archive</p>
+            </div>
+          </div>
         </div>
         <div class="sidebar-section">
-          <h2>Sessions</h2>
+          <div class="section-title">
+            <h2>Sessions</h2>
+            <span id="session-count" class="count">0</span>
+          </div>
           <div id="sessions" class="session-list"></div>
+        </div>
+        <div class="sidebar-footer">
+          <p>Local timeline viewer. No OpenClaw repo changes required.</p>
         </div>
       </aside>
       <main class="main">
         <div class="toolbar">
           <div class="toolbar-left">
-            <h2 id="session-title">Select a session</h2>
-            <p id="session-subtitle" class="muted"></p>
+            <div class="title-stack">
+              <h2 id="session-title">Select a session</h2>
+              <p id="session-subtitle" class="muted"></p>
+            </div>
+            <div id="session-chips" class="session-chips"></div>
           </div>
           <div class="toolbar-right">
-            <input id="search" type="search" placeholder="Search timeline" />
+            <label class="search-wrap">
+              <span class="search-label">Search</span>
+              <input id="search" type="search" placeholder="Search timeline" />
+            </label>
           </div>
         </div>
         <div class="filters">
-          <label><input type="checkbox" data-kind="user_message" checked /> User</label>
-          <label><input type="checkbox" data-kind="assistant_message" /> Assistant</label>
-          <label><input type="checkbox" data-kind="tool" checked /> Tools</label>
-          <label><input type="checkbox" data-kind="subagent_run" checked /> Subagents</label>
-          <label><input type="checkbox" data-kind="compaction" checked /> Compaction</label>
-          <label><input type="checkbox" data-kind="agent_event" checked /> Agent events</label>
-          <label><input type="checkbox" data-kind="model_change" checked /> Model</label>
-          <label><input type="checkbox" data-kind="thinking_level_change" checked /> Thinking</label>
-          <label><input type="checkbox" data-kind="session_info" checked /> Session info</label>
+          <span class="filters-label">Filters</span>
+          <label class="filter-pill">
+            <input type="checkbox" data-kind="user_message" checked />
+            <span>User</span>
+          </label>
+          <label class="filter-pill">
+            <input type="checkbox" data-kind="assistant_message" />
+            <span>Assistant</span>
+          </label>
+          <label class="filter-pill">
+            <input type="checkbox" data-kind="tool" checked />
+            <span>Tools</span>
+          </label>
+          <label class="filter-pill">
+            <input type="checkbox" data-kind="subagent_run" checked />
+            <span>Subagents</span>
+          </label>
+          <label class="filter-pill">
+            <input type="checkbox" data-kind="compaction" checked />
+            <span>Compaction</span>
+          </label>
+          <label class="filter-pill">
+            <input type="checkbox" data-kind="agent_event" checked />
+            <span>Agent events</span>
+          </label>
+          <label class="filter-pill">
+            <input type="checkbox" data-kind="model_change" checked />
+            <span>Model</span>
+          </label>
+          <label class="filter-pill">
+            <input type="checkbox" data-kind="thinking_level_change" checked />
+            <span>Thinking</span>
+          </label>
+          <label class="filter-pill">
+            <input type="checkbox" data-kind="session_info" checked />
+            <span>Session info</span>
+          </label>
         </div>
         <div id="timeline" class="timeline"></div>
       </main>

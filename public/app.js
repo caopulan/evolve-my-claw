@@ -19,6 +19,8 @@ const sessionsEl = document.getElementById("sessions");
 const timelineEl = document.getElementById("timeline");
 const sessionTitleEl = document.getElementById("session-title");
 const sessionSubtitleEl = document.getElementById("session-subtitle");
+const sessionCountEl = document.getElementById("session-count");
+const sessionChipsEl = document.getElementById("session-chips");
 const searchEl = document.getElementById("search");
 
 function formatTime(ts) {
@@ -26,8 +28,25 @@ function formatTime(ts) {
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
 }
 
+function createEmptyState(message) {
+  const empty = document.createElement("div");
+  empty.className = "empty-state";
+  empty.textContent = message;
+  return empty;
+}
+
 function renderSessions() {
   sessionsEl.innerHTML = "";
+
+  if (sessionCountEl) {
+    sessionCountEl.textContent = String(state.sessions.length);
+  }
+
+  if (!state.sessions.length) {
+    sessionsEl.appendChild(createEmptyState("No sessions found"));
+    return;
+  }
+
   state.sessions.forEach((session) => {
     const card = document.createElement("div");
     card.className = "session-card" + (session.key === state.activeSessionKey ? " active" : "");
@@ -47,8 +66,10 @@ function renderSessions() {
 function renderTimeline() {
   timelineEl.innerHTML = "";
   if (!state.activeSessionKey) {
+    timelineEl.appendChild(createEmptyState("Select a session to load its timeline"));
     return;
   }
+
   const search = state.search.trim().toLowerCase();
   const filtered = state.events.filter((event) => {
     if (!state.filters.has(event.kind)) {
@@ -61,9 +82,15 @@ function renderTimeline() {
     return target.includes(search);
   });
 
-  filtered.forEach((event) => {
+  if (!filtered.length) {
+    timelineEl.appendChild(createEmptyState("No events match the current filters"));
+    return;
+  }
+
+  filtered.forEach((event, index) => {
     const wrapper = document.createElement("div");
     wrapper.className = `event ${event.kind}`;
+    wrapper.style.setProperty("--index", index);
     const header = document.createElement("div");
     header.className = "event-header";
     const kind = document.createElement("div");
@@ -105,6 +132,21 @@ function renderTimeline() {
   });
 }
 
+function updateSessionChips(events) {
+  if (!sessionChipsEl) {
+    return;
+  }
+  sessionChipsEl.innerHTML = "";
+  if (!events || !events.length) {
+    return;
+  }
+
+  const chip = document.createElement("span");
+  chip.className = "chip";
+  chip.textContent = `${events.length} events`;
+  sessionChipsEl.appendChild(chip);
+}
+
 async function loadSessions() {
   const res = await fetch("/api/sessions");
   const data = await res.json();
@@ -116,7 +158,7 @@ async function loadTimeline(sessionKey) {
   state.activeSessionKey = sessionKey;
   renderSessions();
   sessionTitleEl.textContent = sessionKey;
-  sessionSubtitleEl.textContent = "Loading timeline…";
+  sessionSubtitleEl.textContent = "Loading timeline...";
   const res = await fetch(`/api/timeline?sessionKey=${encodeURIComponent(sessionKey)}`);
   const data = await res.json();
   state.events = data.events || [];
@@ -124,6 +166,7 @@ async function loadTimeline(sessionKey) {
   sessionSubtitleEl.textContent = data.session
     ? `${data.session.kind} · ${data.session.agentId}`
     : "";
+  updateSessionChips(state.events);
   renderTimeline();
 }
 
@@ -153,3 +196,4 @@ searchEl.addEventListener("input", (event) => {
 
 wireFilters();
 loadSessions();
+renderTimeline();
