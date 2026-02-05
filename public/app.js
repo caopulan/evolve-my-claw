@@ -42,6 +42,7 @@ const evolutionContentEl = document.getElementById("evolution-content");
 const evolutionSubtitleEl = document.getElementById("evolution-subtitle");
 const viewTabs = Array.from(document.querySelectorAll(".view-option"));
 const viewSwitchEl = document.querySelector(".view-switch");
+const viewIndicatorLabelEl = document.querySelector(".view-indicator-label");
 const taskViewEl = document.getElementById("task-view");
 const evolutionViewEl = document.getElementById("evolution-view");
 const mainEl = document.querySelector(".main");
@@ -289,14 +290,21 @@ function focusTask(task) {
 
 function setMainView(view) {
   state.mainView = view;
+  let activeLabel = "";
   viewTabs.forEach((btn) => {
     const isActive = btn.getAttribute("data-view") === view;
     btn.classList.toggle("active", isActive);
     btn.setAttribute("aria-selected", isActive ? "true" : "false");
     btn.setAttribute("tabindex", isActive ? "0" : "-1");
+    if (isActive) {
+      activeLabel = btn.dataset.label || btn.textContent?.trim() || "";
+    }
   });
   if (viewSwitchEl) {
     viewSwitchEl.setAttribute("data-active", view);
+  }
+  if (viewIndicatorLabelEl && activeLabel) {
+    viewIndicatorLabelEl.textContent = activeLabel;
   }
   if (taskViewEl) {
     taskViewEl.classList.toggle("active", view === "task");
