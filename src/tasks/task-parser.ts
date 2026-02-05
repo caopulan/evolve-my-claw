@@ -15,6 +15,13 @@ export type TaskToolCall = {
   isError?: boolean;
 };
 
+export type TaskContinuation = {
+  messageId: string;
+  ts: number;
+  text: string;
+  kind: "subagent_request" | "background_result" | "followup";
+};
+
 export type TaskCandidateRecord = {
   type: "task_candidate";
   taskId: string;
@@ -22,12 +29,15 @@ export type TaskCandidateRecord = {
   createdAt: number;
   sessionKey: string;
   sessionId: string;
+  parentSessionKey?: string;
+  parentTaskId?: string;
   agentId: string;
   userMessageId: string;
   userMessage: string;
   startTs: number;
   endTs?: number;
   toolCalls: TaskToolCall[];
+  continuations?: TaskContinuation[];
 };
 
 type CandidateBuilder = {
@@ -35,13 +45,126 @@ type CandidateBuilder = {
   createdAt: number;
   sessionKey: string;
   sessionId: string;
+  parentSessionKey?: string;
+  parentTaskId?: string;
   agentId: string;
   userMessageId: string;
   userMessage: string;
   startTs: number;
   endTs?: number;
   toolCalls: TaskToolCall[];
+  continuations: TaskContinuation[];
 };
+
+const CONTINUATION_MAX_CHARS = 2000;
+
+function truncateText(value: string, max = CONTINUATION_MAX_CHARS): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= max) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, max)}…`;
+}
+
+function classifyContinuation(text: string): TaskContinuation["kind"] {
+  const lowered = text.toLowerCase();
+  if (lowered.includes("background task") || lowered.includes("后台任务")) {
+    return "background_result";
+  }
+  return "followup";
+}
+
+function isBackgroundCompletionMessage(text: string): boolean {
+  const trimmed = text.trimStart();
+  const firstLine = trimmed.split(/\\r?\\n/, 1)[0] ?? "";
+  const lowered = firstLine.toLowerCase();
+  if (lowered.includes("background task")) {
+    return true;
+  }
+  if (firstLine.includes("后台任务")) {
+    return true;
+  }
+  return false;
+}
+
+function isAnalysisPromptMessage(text: string): boolean {
+  const lowered = text.toLowerCase();
+  if (lowered.includes("openclaw 任务分析器")) {
+    return true;
+  }
+  if (lowered.includes("task_id:") && lowered.includes("json schema")) {
+    return true;
+  }
+  return false;
+}
+
+function extractBackgroundLabel(text: string): string | undefined {
+  const match = text.match(/background task \"([^\"]+)\"/i);
+  if (match?.[1]) {
+    return match[1].trim();
+  }
+  return undefined;
+}
+
+function extractChildSessionKey(text: string): string | undefined {
+  const match = text.match(/sessionKey\\s+([\\w:.-]+)/i);
+  if (match?.[1]) {
+    return match[1].trim();
+  }
+  return undefined;
+}
+
+function extractChildSessionKeyFromToolResult(result: unknown): string | undefined {
+  if (!result) {
+    return undefined;
+  }
+  if (typeof result === "object") {
+    const record = result as Record<string, unknown>;
+    if (typeof record.childSessionKey === "string") {
+      return record.childSessionKey;
+    }
+    if (Array.isArray(result)) {
+      for (const entry of result) {
+        if (!entry || typeof entry !== "object") {
+          continue;
+        }
+        const item = entry as Record<string, unknown>;
+        if (typeof item.childSessionKey === "string") {
+          return item.childSessionKey;
+        }
+        if (typeof item.text === "string") {
+          try {
+            const parsed = JSON.parse(item.text) as { childSessionKey?: string };
+            if (typeof parsed.childSessionKey === "string") {
+              return parsed.childSessionKey;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    }
+  }
+  if (typeof result === "string") {
+    try {
+      const parsed = JSON.parse(result) as { childSessionKey?: string };
+      if (typeof parsed.childSessionKey === "string") {
+        return parsed.childSessionKey;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return undefined;
+}
+
+function extractSpawnLabelFromArgs(args: Record<string, unknown> | undefined): string | undefined {
+  if (!args) {
+    return undefined;
+  }
+  const label = typeof args.label === "string" ? args.label.trim() : "";
+  return label || undefined;
+}
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") {
@@ -76,12 +199,15 @@ function finalizeCandidate(candidate: CandidateBuilder | null): TaskCandidateRec
     createdAt: candidate.createdAt,
     sessionKey: candidate.sessionKey,
     sessionId: candidate.sessionId,
+    parentSessionKey: candidate.parentSessionKey,
+    parentTaskId: candidate.parentTaskId,
     agentId: candidate.agentId,
     userMessageId: candidate.userMessageId,
     userMessage: candidate.userMessage,
     startTs: candidate.startTs,
     endTs: candidate.endTs,
     toolCalls: candidate.toolCalls,
+    continuations: candidate.continuations.length > 0 ? candidate.continuations : undefined,
   };
 }
 
@@ -94,25 +220,71 @@ export function buildTaskCandidates(params: {
   const toolFilters = compileToolFilters(params.config.excludeTools);
 
   const candidates: TaskCandidateRecord[] = [];
+  const candidatesById = new Map<string, TaskCandidateRecord>();
+  const spawnBySessionKey = new Map<string, string>();
+  const spawnByLabel = new Map<string, string>();
   let current: CandidateBuilder | null = null;
+
+  const attachContinuation = (taskId: string, continuation: TaskContinuation): boolean => {
+    if (current && current.taskId === taskId) {
+      current.continuations.push(continuation);
+      return true;
+    }
+    const existing = candidatesById.get(taskId);
+    if (!existing) {
+      return false;
+    }
+    if (!existing.continuations) {
+      existing.continuations = [];
+    }
+    existing.continuations.push(continuation);
+    return true;
+  };
 
   for (const event of events) {
     if (event.kind === "user_message") {
+      const userMessageRaw =
+        typeof event.details?.text === "string" ? event.details.text : event.summary ?? "";
+      const userMessage = userMessageRaw.trim();
+      if (userMessage && isAnalysisPromptMessage(userMessage)) {
+        continue;
+      }
+      if (userMessage && isBackgroundCompletionMessage(userMessage)) {
+        const continuation: TaskContinuation = {
+          messageId: event.id,
+          ts: event.ts,
+          text: truncateText(userMessage),
+          kind: classifyContinuation(userMessage),
+        };
+        const childKey = extractChildSessionKey(userMessage);
+        const label = extractBackgroundLabel(userMessage);
+        const targetTaskId =
+          (childKey ? spawnBySessionKey.get(childKey) : undefined) ??
+          (label ? spawnByLabel.get(label) : undefined);
+        if (targetTaskId) {
+          attachContinuation(targetTaskId, continuation);
+        } else if (current) {
+          current.continuations.push(continuation);
+        }
+        continue;
+      }
       const finished = finalizeCandidate(current);
       if (finished) {
         candidates.push(finished);
+        candidatesById.set(finished.taskId, finished);
       }
-      const userMessage = typeof event.details?.text === "string" ? event.details.text : event.summary ?? "";
       current = {
         taskId: `task-${params.session.sessionId}-${event.id}`,
         createdAt: event.ts,
         sessionKey: params.session.key,
         sessionId: params.session.sessionId,
+        parentSessionKey: params.session.spawnedBy ?? undefined,
         agentId: params.session.agentId,
         userMessageId: event.id,
-        userMessage,
+        userMessage: userMessage,
         startTs: event.ts,
         toolCalls: [],
+        continuations: [],
       };
       continue;
     }
@@ -130,6 +302,16 @@ export function buildTaskCandidates(params: {
       }
       const toolCall = buildToolCall(event);
       current.toolCalls.push(toolCall);
+      if (toolName === "sessions_spawn") {
+        const childKey = extractChildSessionKeyFromToolResult(details?.result);
+        if (childKey) {
+          spawnBySessionKey.set(childKey, current.taskId);
+        }
+        const label = extractSpawnLabelFromArgs(args);
+        if (label) {
+          spawnByLabel.set(label, current.taskId);
+        }
+      }
       const endTs = toolCall.endTs ?? event.ts;
       if (!current.endTs || endTs > current.endTs) {
         current.endTs = endTs;
@@ -140,6 +322,7 @@ export function buildTaskCandidates(params: {
   const finished = finalizeCandidate(current);
   if (finished) {
     candidates.push(finished);
+    candidatesById.set(finished.taskId, finished);
   }
 
   return candidates;

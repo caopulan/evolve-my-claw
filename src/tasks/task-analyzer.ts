@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { GatewayCaptureClient } from "../gateway/client.js";
-import type { TaskCandidateRecord, TaskToolCall } from "./task-parser.js";
+import type { TaskCandidateRecord, TaskContinuation, TaskToolCall } from "./task-parser.js";
 import { ANALYSIS_VERSION, type TaskAnalysisRecord } from "./analysis-store.js";
 
 type GatewayAgentResponse = {
@@ -82,6 +82,12 @@ function buildPrompt(task: TaskCandidateRecord): string {
   const summary = buildToolSummary(task.toolCalls)
     .map((entry) => `${entry.tool} x${entry.count}${entry.errors ? ` (errors:${entry.errors})` : ""}`)
     .join(", ");
+  const continuations = Array.isArray(task.continuations) ? task.continuations : [];
+  const continuationLines = continuations.slice(0, 3).map((entry: TaskContinuation, idx: number) => {
+    return `#${idx + 1} [${entry.kind}] ${truncateText(entry.text, 800)}`;
+  });
+  const continuationBlock =
+    continuationLines.length > 0 ? continuationLines.join("\n") : "none";
   return [
     "你是 OpenClaw 任务分析器。",
     "请基于以下候选任务，输出严格 JSON（不要 Markdown，不要代码块）。",
@@ -103,6 +109,7 @@ function buildPrompt(task: TaskCandidateRecord): string {
     "",
     `TASK_ID: ${task.taskId}`,
     `USER_MESSAGE: ${normalizeValue(task.userMessage, 2000)}`,
+    `CONTINUATIONS: ${continuationBlock}`,
     `TOOL_SUMMARY: ${summary || "none"}`,
     "TOOLS:",
     toolList,
