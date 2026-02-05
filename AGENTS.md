@@ -10,6 +10,10 @@ This repository contains **Evolve My Claw**, an external timeline and evolution 
 - Analyze task candidates with OpenClaw itself (LLM) and append structured analysis JSONL.
 - Avoid modifying the OpenClaw repo unless explicitly requested.
 
+## GitHub Description
+
+Task-first telemetry for OpenClaw—merge subagents, visualize timelines, drive evolution.
+
 ## Capabilities
 
 - **Task candidates**: `emc parse` scans session transcripts and writes candidate tasks to `~/.openclaw/evolve-my-claw/tasks.jsonl`. Each user message is a task boundary; tasks with no tool calls are filtered out.
