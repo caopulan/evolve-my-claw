@@ -70,6 +70,7 @@ Notes:
 - Prefer small, focused modules. Keep ingestion logic pure and testable.
 - Keep UI changes in `public/` simple and dependency-free.
 - Every change should include a git commit.
+- Use concise, scoped commit messages (e.g. `UI: add subagent expanders`) and push after finishing the change.
 
 ## Testing
 

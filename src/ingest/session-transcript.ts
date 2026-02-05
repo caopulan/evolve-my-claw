@@ -13,6 +13,7 @@ export type TimelineEvent = {
   durationMs?: number;
   summary?: string;
   details?: Record<string, unknown>;
+  children?: TimelineEvent[];
 };
 
 type ToolCallRecord = {

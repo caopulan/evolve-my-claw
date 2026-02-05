@@ -2,6 +2,7 @@ const state = {
   sessions: [],
   activeSessionKey: null,
   events: [],
+  eventIndex: new Map(),
   tasksBySession: new Map(),
   tasksById: new Map(),
   tasksLoaded: false,
@@ -26,6 +27,7 @@ const state = {
   filteredEventIds: new Set(),
   selectedEventId: null,
   search: "",
+  expandedEventIds: new Set(),
 };
 
 const sessionsEl = document.getElementById("sessions");
@@ -475,15 +477,17 @@ function createJsonTree(value) {
 }
 
 function normalizeEvents(events) {
-  return (events || []).map((event, index) => {
-    if (event.__key) {
-      return event;
-    }
-    return {
-      ...event,
-      __key: event.id || `${event.kind}-${event.ts}-${index}`,
-    };
-  });
+  const indexMap = new Map();
+  let fallbackIndex = 0;
+  const visit = (items) =>
+    (items || []).map((event) => {
+      const key = event.__key || event.id || `${event.kind}-${event.ts}-${fallbackIndex++}`;
+      const children = Array.isArray(event.children) ? visit(event.children) : undefined;
+      const normalized = { ...event, __key: key, children };
+      indexMap.set(key, normalized);
+      return normalized;
+    });
+  return { events: visit(events), indexMap };
 }
 
 function getEventKey(event) {
@@ -494,7 +498,7 @@ function getSelectedEvent() {
   if (!state.selectedEventId) {
     return null;
   }
-  return state.events.find((event) => getEventKey(event) === state.selectedEventId) || null;
+  return state.eventIndex.get(state.selectedEventId) || null;
 }
 
 function toEventDataId(eventId) {
@@ -911,6 +915,156 @@ function renderEvolutionView() {
   evolutionContentEl.appendChild(container);
 }
 
+function eventMatchesSearch(event, search) {
+  if (!search) {
+    return true;
+  }
+  const target = `${event.summary ?? ""} ${JSON.stringify(event.details ?? {})}`.toLowerCase();
+  return target.includes(search);
+}
+
+function filterEventTree(events, options) {
+  const filtered = [];
+  const ids = new Set();
+  const search = options.search;
+  const focusRange = options.focusRange;
+  const filters = options.filters;
+
+  for (const event of events) {
+    const childResult = Array.isArray(event.children)
+      ? filterEventTree(event.children, options)
+      : { events: [], ids: new Set() };
+
+    const matchesKind = filters.has(event.kind);
+    const matchesSearch = eventMatchesSearch(event, search);
+    const withinRange =
+      !focusRange || (event.ts >= focusRange.start && event.ts <= focusRange.end);
+    const matchesSelf = matchesKind && matchesSearch && withinRange;
+
+    if (matchesSelf || childResult.events.length > 0) {
+      const nextEvent = {
+        ...event,
+        children: childResult.events.length > 0 ? childResult.events : undefined,
+      };
+      filtered.push(nextEvent);
+      ids.add(getEventKey(nextEvent));
+      childResult.ids.forEach((id) => ids.add(id));
+    }
+  }
+
+  return { events: filtered, ids };
+}
+
+function findFirstEventId(events) {
+  for (const event of events) {
+    const key = getEventKey(event);
+    if (key) {
+      return key;
+    }
+    if (Array.isArray(event.children)) {
+      const child = findFirstEventId(event.children);
+      if (child) {
+        return child;
+      }
+    }
+  }
+  return null;
+}
+
+function renderEventNode(event, indexRef, depth = 0) {
+  const eventId = getEventKey(event);
+  const wrapper = document.createElement("div");
+  wrapper.className = "event-node";
+  wrapper.style.setProperty("--depth", String(depth));
+
+  const hasChildren = Array.isArray(event.children) && event.children.length > 0;
+
+  const card = document.createElement("div");
+  card.className =
+    `event ${event.kind}` +
+    (eventId === state.selectedEventId ? " selected" : "") +
+    (hasChildren ? " has-children" : "");
+  card.style.setProperty("--index", String(indexRef.value));
+  card.setAttribute("data-event-id", toEventDataId(eventId));
+  card.setAttribute("role", "button");
+  card.setAttribute("tabindex", "0");
+
+  const header = document.createElement("div");
+  header.className = "event-header";
+  const kind = document.createElement("div");
+  kind.className = "event-kind";
+  kind.textContent = event.kind.replace(/_/g, " ");
+  const time = document.createElement("div");
+  time.className = "event-time";
+  time.textContent = formatTime(event.ts);
+  header.appendChild(kind);
+  header.appendChild(time);
+
+  const summary = document.createElement("div");
+  summary.className = "event-summary";
+  setMarkdown(summary, event.summary || "(no summary)");
+
+  card.appendChild(header);
+  card.appendChild(summary);
+
+  if (event.durationMs != null) {
+    const duration = document.createElement("div");
+    duration.className = "event-details";
+    duration.textContent = `duration: ${(event.durationMs / 1000).toFixed(2)}s`;
+    card.appendChild(duration);
+  }
+
+  card.addEventListener("click", () => selectEvent(eventId));
+  card.addEventListener("keydown", (eventKey) => {
+    if (eventKey.key === "Enter" || eventKey.key === " ") {
+      eventKey.preventDefault();
+      selectEvent(eventId);
+    }
+  });
+
+  indexRef.value += 1;
+
+  if (!hasChildren) {
+    wrapper.appendChild(card);
+    return wrapper;
+  }
+
+  const group = document.createElement("details");
+  group.className = "event-group";
+  if (state.expandedEventIds.has(eventId)) {
+    group.open = true;
+  }
+  group.addEventListener("toggle", () => {
+    if (group.open) {
+      state.expandedEventIds.add(eventId);
+    } else {
+      state.expandedEventIds.delete(eventId);
+    }
+  });
+
+  const summaryWrap = document.createElement("summary");
+  summaryWrap.className = "event-group-summary";
+  summaryWrap.appendChild(card);
+  summaryWrap.addEventListener("click", () => selectEvent(eventId));
+  summaryWrap.addEventListener("keydown", (eventKey) => {
+    if (eventKey.key === "Enter" || eventKey.key === " ") {
+      eventKey.preventDefault();
+      selectEvent(eventId);
+    }
+  });
+
+  const childrenWrap = document.createElement("div");
+  childrenWrap.className = "event-children";
+  event.children.forEach((child) => {
+    childrenWrap.appendChild(renderEventNode(child, indexRef, depth + 1));
+  });
+
+  group.appendChild(summaryWrap);
+  group.appendChild(childrenWrap);
+  wrapper.appendChild(group);
+  return wrapper;
+}
+
 function renderTimeline() {
   if (state.mainView !== "task") {
     return;
@@ -930,29 +1084,20 @@ function renderTimeline() {
       ? getTaskRange(focusedTask)
       : null;
 
-  const filtered = state.events.filter((event) => {
-    if (!state.filters.has(event.kind)) {
-      return false;
-    }
-    if (focusRange) {
-      if (event.ts < focusRange.start || event.ts > focusRange.end) {
-        return false;
-      }
-    }
-    if (!search) {
-      return true;
-    }
-    const target = `${event.summary ?? ""} ${JSON.stringify(event.details ?? {})}`.toLowerCase();
-    return target.includes(search);
+  const filteredResult = filterEventTree(state.events, {
+    filters: state.filters,
+    search,
+    focusRange,
   });
 
-  state.filteredEventIds = new Set(filtered.map((event) => getEventKey(event)));
+  state.filteredEventIds = filteredResult.ids;
 
-  if (filtered.length > 0 && !state.filteredEventIds.has(state.selectedEventId)) {
-    state.selectedEventId = getEventKey(filtered[0]);
+  const firstVisibleId = findFirstEventId(filteredResult.events);
+  if (firstVisibleId && !state.filteredEventIds.has(state.selectedEventId)) {
+    state.selectedEventId = firstVisibleId;
   }
 
-  if (!filtered.length) {
+  if (!filteredResult.events.length) {
     timelineEl.appendChild(
       createEmptyState(
         focusRange
@@ -964,48 +1109,9 @@ function renderTimeline() {
     return;
   }
 
-  filtered.forEach((event, index) => {
-    const eventId = getEventKey(event);
-    const wrapper = document.createElement("div");
-    wrapper.className = `event ${event.kind}` + (eventId === state.selectedEventId ? " selected" : "");
-    wrapper.style.setProperty("--index", index);
-    wrapper.setAttribute("data-event-id", toEventDataId(eventId));
-    wrapper.setAttribute("role", "button");
-    wrapper.setAttribute("tabindex", "0");
-    const header = document.createElement("div");
-    header.className = "event-header";
-    const kind = document.createElement("div");
-    kind.className = "event-kind";
-    kind.textContent = event.kind.replace(/_/g, " ");
-    const time = document.createElement("div");
-    time.className = "event-time";
-    time.textContent = formatTime(event.ts);
-    header.appendChild(kind);
-    header.appendChild(time);
-
-    const summary = document.createElement("div");
-    summary.className = "event-summary";
-    setMarkdown(summary, event.summary || "(no summary)");
-
-    wrapper.appendChild(header);
-    wrapper.appendChild(summary);
-
-    if (event.durationMs != null) {
-      const duration = document.createElement("div");
-      duration.className = "event-details";
-      duration.textContent = `duration: ${(event.durationMs / 1000).toFixed(2)}s`;
-      wrapper.appendChild(duration);
-    }
-
-    wrapper.addEventListener("click", () => selectEvent(eventId));
-    wrapper.addEventListener("keydown", (eventKey) => {
-      if (eventKey.key === "Enter" || eventKey.key === " ") {
-        eventKey.preventDefault();
-        selectEvent(eventId);
-      }
-    });
-
-    timelineEl.appendChild(wrapper);
+  const indexRef = { value: 0 };
+  filteredResult.events.forEach((event) => {
+    timelineEl.appendChild(renderEventNode(event, indexRef));
   });
 
   renderDetailPanel();
@@ -1096,8 +1202,11 @@ async function loadTimeline(sessionKey) {
   sessionSubtitleEl.textContent = "Loading timeline...";
   const res = await fetch(`/api/timeline?sessionKey=${encodeURIComponent(sessionKey)}`);
   const data = await res.json();
-  state.events = normalizeEvents(data.events || []);
+  const normalized = normalizeEvents(data.events || []);
+  state.events = normalized.events;
+  state.eventIndex = normalized.indexMap;
   state.selectedEventId = state.events.length ? getEventKey(state.events[0]) : null;
+  state.expandedEventIds = new Set();
   sessionTitleEl.textContent = data.session?.displayName || data.session?.label || sessionKey;
   sessionSubtitleEl.textContent = data.session
     ? `${data.session.kind} · ${data.session.agentId}`
