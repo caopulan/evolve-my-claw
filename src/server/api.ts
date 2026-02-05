@@ -7,6 +7,7 @@ import { loadSubagentRuns } from "../ingest/subagents.js";
 import { capturedEventsToTimeline, loadCapturedAgentEvents } from "../ingest/agent-events.js";
 import { resolveOpenClawStateDir } from "../paths.js";
 import { loadConfig } from "../config.js";
+import { EVOLUTION_AGENT_ID } from "../evolution/constants.js";
 import { loadTaskRecords, type TaskRecord } from "../tasks/task-store.js";
 import { loadAnalysisRecords, type TaskAnalysisRecord } from "../tasks/analysis-store.js";
 
@@ -29,7 +30,24 @@ function extractAgentIdFromSessionKey(sessionKey: string): string | undefined {
 
 function resolveExcludedAgentIds(stateDir: string): Set<string> {
   const config = loadConfig({ stateDir });
-  return new Set(config.excludeAgentIds.map((id) => id.toLowerCase()));
+  const excluded = new Set(config.excludeAgentIds.map((id) => id.toLowerCase()));
+  excluded.add(EVOLUTION_AGENT_ID.toLowerCase());
+  return excluded;
+}
+
+function isExcludedSessionEntry(entry: SessionIndexEntry, excluded: Set<string>): boolean {
+  if (excluded.has(entry.agentId.toLowerCase())) {
+    return true;
+  }
+  const keyAgent = extractAgentIdFromSessionKey(entry.key);
+  if (keyAgent && excluded.has(keyAgent.toLowerCase())) {
+    return true;
+  }
+  const spawnedByAgent = entry.spawnedBy ? extractAgentIdFromSessionKey(entry.spawnedBy) : undefined;
+  if (spawnedByAgent && excluded.has(spawnedByAgent.toLowerCase())) {
+    return true;
+  }
+  return false;
 }
 
 function filterSessionsByAgent(
@@ -39,7 +57,7 @@ function filterSessionsByAgent(
   if (excluded.size === 0) {
     return sessions;
   }
-  return sessions.filter((session) => !excluded.has(session.agentId.toLowerCase()));
+  return sessions.filter((session) => !isExcludedSessionEntry(session, excluded));
 }
 
 function isExcludedSessionKey(sessionKey: string, excluded: Set<string>): boolean {
