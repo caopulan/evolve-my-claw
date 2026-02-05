@@ -713,7 +713,7 @@ function renderDetailPanel() {
   detailsSection.className = "detail-section";
   const detailsTitle = document.createElement("div");
   detailsTitle.className = "detail-section-title";
-  detailsTitle.textContent = "Details JSON";
+  detailsTitle.textContent = "Details JSON (click value to toggle markdown)";
   detailsSection.appendChild(detailsTitle);
   if (typeof event.details === "undefined") {
     const empty = document.createElement("div");
