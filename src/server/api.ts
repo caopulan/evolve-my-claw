@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import type { TimelineEvent } from "../ingest/session-transcript.js";
 import { parseSessionTranscript } from "../ingest/session-transcript.js";
 import { listSessions, type SessionIndexEntry } from "../ingest/session-store.js";
@@ -15,6 +16,78 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     return undefined;
   }
   return value as Record<string, unknown>;
+}
+
+function extractAgentIdFromSessionKey(sessionKey: string): string | undefined {
+  const parts = sessionKey.split(":");
+  if (parts.length >= 2 && parts[0] === "agent") {
+    return parts[1];
+  }
+  return undefined;
+}
+
+function resolveSessionIdFromFile(sessionFile: string, fallback?: string): string {
+  const base = path.basename(sessionFile);
+  const match = base.match(/^([a-f0-9-]+)\.jsonl/i);
+  if (match?.[1]) {
+    return match[1];
+  }
+  return fallback ?? "unknown";
+}
+
+function resolveSessionFileById(stateDir: string, agentId: string, sessionId: string): string | undefined {
+  const sessionsDir = path.join(stateDir, "agents", agentId, "sessions");
+  const candidate = path.join(sessionsDir, `${sessionId}.jsonl`);
+  if (fs.existsSync(candidate)) {
+    return candidate;
+  }
+  if (!fs.existsSync(sessionsDir)) {
+    return undefined;
+  }
+  try {
+    const match = fs
+      .readdirSync(sessionsDir)
+      .find((name) => name.startsWith(`${sessionId}.jsonl.deleted.`));
+    if (match) {
+      return path.join(sessionsDir, match);
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
+}
+
+function extractSessionHints(events: TimelineEvent[]): Map<
+  string,
+  { sessionId?: string; transcriptPath?: string }
+> {
+  const hints = new Map<string, { sessionId?: string; transcriptPath?: string }>();
+  for (const event of events) {
+    if (event.kind !== "user_message") {
+      continue;
+    }
+    const details = asRecord(event.details);
+    const text = typeof details?.text === "string" ? details.text : "";
+    if (!text.includes("sessionKey")) {
+      continue;
+    }
+    const keyMatch = text.match(/sessionKey\s+(\S+)/i);
+    if (!keyMatch?.[1]) {
+      continue;
+    }
+    const key = keyMatch[1].trim();
+    const sessionIdMatch = text.match(/sessionId\s+(\S+)/i);
+    const transcriptMatch = text.match(/transcript\s+(\S+\.jsonl(?:\.deleted\.\S+)?)/i);
+    const hint = hints.get(key) ?? {};
+    if (sessionIdMatch?.[1]) {
+      hint.sessionId = sessionIdMatch[1].trim();
+    }
+    if (transcriptMatch?.[1]) {
+      hint.transcriptPath = transcriptMatch[1].trim();
+    }
+    hints.set(key, hint);
+  }
+  return hints;
 }
 
 function extractChildSessionKeyFromToolResult(result: unknown): string | undefined {
@@ -194,6 +267,25 @@ export async function buildTimeline(params: {
     });
   }
 
+  const rootTranscriptEvents = await loadTranscriptEvents({ session });
+  const sessionHints = extractSessionHints(rootTranscriptEvents);
+  const sessionFileOverrides = new Map<string, string>();
+  const sessionIdOverrides = new Map<string, string>();
+  sessionHints.forEach((hint, sessionKey) => {
+    const agentId = extractAgentIdFromSessionKey(sessionKey) ?? session.agentId;
+    let sessionFile = hint.transcriptPath && fs.existsSync(hint.transcriptPath) ? hint.transcriptPath : undefined;
+    const sessionId = hint.sessionId;
+    if (!sessionFile && sessionId) {
+      sessionFile = resolveSessionFileById(stateDir, agentId, sessionId);
+    }
+    if (sessionFile) {
+      sessionFileOverrides.set(sessionKey, sessionFile);
+      sessionIdOverrides.set(sessionKey, sessionId ?? resolveSessionIdFromFile(sessionFile, sessionId));
+    } else if (sessionId) {
+      sessionIdOverrides.set(sessionKey, sessionId);
+    }
+  });
+
   const expandedCache = new Map<string, TimelineEvent[]>();
 
   const expandSessionEvents = async (
@@ -203,11 +295,21 @@ export async function buildTimeline(params: {
     if (expandedCache.has(sessionKey)) {
       return expandedCache.get(sessionKey) ?? [];
     }
+    let events: TimelineEvent[] = [];
     const sessionEntry = sessionsByKey.get(sessionKey);
-    if (!sessionEntry) {
+    if (sessionEntry) {
+      events = sessionKey === session.key ? rootTranscriptEvents : await loadTranscriptEvents({ session: sessionEntry });
+    } else if (sessionFileOverrides.has(sessionKey)) {
+      const sessionFile = sessionFileOverrides.get(sessionKey)!;
+      const sessionId = sessionIdOverrides.get(sessionKey) ?? resolveSessionIdFromFile(sessionFile, sessionKey);
+      events = await parseSessionTranscript({
+        sessionFile,
+        sessionKey,
+        sessionId,
+      });
+    } else {
       return [];
     }
-    const events = await loadTranscriptEvents({ session: sessionEntry });
     const expanded: TimelineEvent[] = [];
     for (const event of events) {
       if (!isSessionsSpawnEvent(event)) {
