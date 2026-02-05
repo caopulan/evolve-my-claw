@@ -1,7 +1,7 @@
 import path from "node:path";
 import fastify from "fastify";
 import fastifyStatic from "@fastify/static";
-import { buildTimeline, getSessions } from "./api.js";
+import { buildTimeline, getSessions, getTasks } from "./api.js";
 
 export async function startServer(params: {
   host: string;
@@ -24,6 +24,13 @@ export async function startServer(params: {
     }
     const result = await buildTimeline({ sessionKey, stateDir: params.stateDir });
     return result;
+  });
+
+  app.get("/api/tasks", async (request) => {
+    const query = request.query as { sessionKey?: string };
+    const sessionKey = typeof query.sessionKey === "string" ? query.sessionKey.trim() : undefined;
+    const tasks = await getTasks({ stateDir: params.stateDir, sessionKey });
+    return { tasks };
   });
 
   await app.register(fastifyStatic, {

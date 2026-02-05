@@ -2,6 +2,10 @@ const state = {
   sessions: [],
   activeSessionKey: null,
   events: [],
+  tasksBySession: new Map(),
+  tasksLoaded: false,
+  expandedSessions: new Set(),
+  selectedTaskIds: new Set(),
   filters: new Set([
     "user_message",
     "tool",
@@ -28,9 +32,16 @@ const detailTitleEl = document.getElementById("detail-title");
 const detailSubtitleEl = document.getElementById("detail-subtitle");
 const detailBodyEl = document.getElementById("detail-body");
 
+const SELECTED_TASKS_KEY = "emc_selected_tasks";
+
 function formatTime(ts) {
   const date = new Date(ts);
   return `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+}
+
+function formatTaskTime(ts) {
+  const date = new Date(ts);
+  return date.toLocaleString();
 }
 
 function createEmptyState(message) {
@@ -39,6 +50,40 @@ function createEmptyState(message) {
   empty.textContent = message;
   return empty;
 }
+
+function truncateText(text, max = 80) {
+  const trimmed = text.trim();
+  if (trimmed.length <= max) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, max)}…`;
+}
+
+function loadSelectedTaskIds() {
+  try {
+    const raw = localStorage.getItem(SELECTED_TASKS_KEY);
+    if (!raw) {
+      return new Set();
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return new Set(parsed.filter((item) => typeof item === "string"));
+    }
+  } catch {
+    // ignore
+  }
+  return new Set();
+}
+
+function persistSelectedTaskIds() {
+  try {
+    localStorage.setItem(SELECTED_TASKS_KEY, JSON.stringify([...state.selectedTaskIds]));
+  } catch {
+    // ignore
+  }
+}
+
+state.selectedTaskIds = loadSelectedTaskIds();
 
 function formatJsonValue(value) {
   if (typeof value === "string") {
@@ -186,20 +231,92 @@ function renderSessions() {
   }
 
   state.sessions.forEach((session, index) => {
+    const tree = document.createElement("div");
+    tree.className = "session-tree" + (state.expandedSessions.has(session.key) ? " expanded" : "");
+    tree.setAttribute("data-session-key", session.key);
+
     const card = document.createElement("div");
     card.style.setProperty("--index", String(index));
     card.className = "session-card" + (session.key === state.activeSessionKey ? " active" : "");
     card.setAttribute("data-session-key", session.key);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "session-toggle";
+    toggle.setAttribute("aria-label", "Toggle tasks");
+    toggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleSessionExpanded(session.key);
+    });
+    const textWrap = document.createElement("div");
+    textWrap.className = "session-text";
     const title = document.createElement("div");
     title.className = "session-title";
     title.textContent = session.displayName || session.label || session.key;
     const meta = document.createElement("div");
     meta.className = "session-meta";
     meta.textContent = `${session.kind} · ${session.agentId}`;
-    card.appendChild(title);
-    card.appendChild(meta);
+    textWrap.appendChild(title);
+    textWrap.appendChild(meta);
+    card.appendChild(toggle);
+    card.appendChild(textWrap);
     card.addEventListener("click", () => loadTimeline(session.key));
-    sessionsEl.appendChild(card);
+
+    const taskList = document.createElement("div");
+    taskList.className = "task-list";
+    const header = document.createElement("div");
+    header.className = "task-list-header";
+    header.textContent = "Tasks";
+    const count = document.createElement("span");
+    count.className = "task-count";
+    const tasksForSession = state.tasksBySession.get(session.key) || [];
+    count.textContent = state.tasksLoaded ? String(tasksForSession.length) : "…";
+    header.appendChild(count);
+    taskList.appendChild(header);
+
+    if (!state.tasksLoaded) {
+      const empty = document.createElement("div");
+      empty.className = "task-empty";
+      empty.textContent = "Loading tasks...";
+      taskList.appendChild(empty);
+    } else if (tasksForSession.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "task-empty";
+      empty.textContent = "No tasks found. Run emc parse to generate tasks.";
+      taskList.appendChild(empty);
+    } else {
+      tasksForSession.forEach((task) => {
+        const item = document.createElement("label");
+        item.className = "task-item";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = state.selectedTaskIds.has(task.taskId);
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) {
+            state.selectedTaskIds.add(task.taskId);
+          } else {
+            state.selectedTaskIds.delete(task.taskId);
+          }
+          persistSelectedTaskIds();
+        });
+        const info = document.createElement("div");
+        info.className = "task-info";
+        const titleEl = document.createElement("div");
+        titleEl.className = "task-title";
+        titleEl.textContent = truncateText(task.userMessage || task.taskId);
+        const timeEl = document.createElement("div");
+        timeEl.className = "task-time";
+        timeEl.textContent = formatTaskTime(task.startTs);
+        info.appendChild(titleEl);
+        info.appendChild(timeEl);
+        item.appendChild(checkbox);
+        item.appendChild(info);
+        taskList.appendChild(item);
+      });
+    }
+
+    tree.appendChild(card);
+    tree.appendChild(taskList);
+    sessionsEl.appendChild(tree);
   });
 }
 
@@ -208,6 +325,23 @@ function updateActiveSessionCard() {
     const key = card.getAttribute("data-session-key");
     card.classList.toggle("active", key === state.activeSessionKey);
   });
+}
+
+function setSessionExpanded(sessionKey, expanded) {
+  if (expanded) {
+    state.expandedSessions.add(sessionKey);
+  } else {
+    state.expandedSessions.delete(sessionKey);
+  }
+  const tree = sessionsEl.querySelector(`.session-tree[data-session-key="${sessionKey}"]`);
+  if (tree) {
+    tree.classList.toggle("expanded", expanded);
+  }
+}
+
+function toggleSessionExpanded(sessionKey) {
+  const expanded = state.expandedSessions.has(sessionKey);
+  setSessionExpanded(sessionKey, !expanded);
 }
 
 function renderDetailPanel() {
@@ -386,9 +520,36 @@ async function loadSessions() {
   updateActiveSessionCard();
 }
 
+async function loadTasks() {
+  try {
+    const res = await fetch("/api/tasks");
+    const data = await res.json();
+    const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+    const bySession = new Map();
+    tasks.forEach((task) => {
+      if (!task || typeof task.sessionKey !== "string") {
+        return;
+      }
+      if (!bySession.has(task.sessionKey)) {
+        bySession.set(task.sessionKey, []);
+      }
+      bySession.get(task.sessionKey).push(task);
+    });
+    bySession.forEach((list) => list.sort((a, b) => a.startTs - b.startTs));
+    state.tasksBySession = bySession;
+    state.tasksLoaded = true;
+    renderSessions();
+    updateActiveSessionCard();
+  } catch {
+    state.tasksLoaded = true;
+    renderSessions();
+  }
+}
+
 async function loadTimeline(sessionKey) {
   state.activeSessionKey = sessionKey;
   updateActiveSessionCard();
+  setSessionExpanded(sessionKey, true);
   sessionTitleEl.textContent = sessionKey;
   sessionSubtitleEl.textContent = "Loading timeline...";
   const res = await fetch(`/api/timeline?sessionKey=${encodeURIComponent(sessionKey)}`);
@@ -429,4 +590,5 @@ searchEl.addEventListener("input", (event) => {
 
 wireFilters();
 loadSessions();
+loadTasks();
 renderTimeline();

@@ -5,6 +5,7 @@ import { listSessions, type SessionIndexEntry } from "../ingest/session-store.js
 import { loadSubagentRuns, subagentRunsToEvents } from "../ingest/subagents.js";
 import { capturedEventsToTimeline, loadCapturedAgentEvents } from "../ingest/agent-events.js";
 import { resolveOpenClawStateDir } from "../paths.js";
+import { loadTaskRecords, type TaskRecord } from "../tasks/task-store.js";
 
 const transcriptCache = new Map<string, { mtimeMs: number; events: TimelineEvent[] }>();
 
@@ -57,4 +58,15 @@ export async function buildTimeline(params: {
 
   const events = [...transcriptEvents, ...subagentEvents, ...agentTimeline].sort((a, b) => a.ts - b.ts);
   return { session, events };
+}
+
+export async function getTasks(params?: {
+  stateDir?: string;
+  sessionKey?: string;
+}): Promise<TaskRecord[]> {
+  const stateDir = params?.stateDir ?? resolveOpenClawStateDir();
+  const tasks = await loadTaskRecords(stateDir);
+  const sessionKey = params?.sessionKey?.trim();
+  const filtered = sessionKey ? tasks.filter((task) => task.sessionKey === sessionKey) : tasks;
+  return filtered.sort((a, b) => a.startTs - b.startTs);
 }
