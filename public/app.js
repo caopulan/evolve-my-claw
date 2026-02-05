@@ -473,77 +473,35 @@ function renderDetailPanel() {
     return;
   }
   detailBodyEl.innerHTML = "";
-  const selectedTasks = getSelectedTasks();
-  const selectedCount = selectedTasks.length;
-  let activeTask =
-    (state.activeTaskId && state.tasksById.get(state.activeTaskId)) ||
-    (selectedTasks.length > 0 ? selectedTasks[0] : null);
-  if (activeTask && state.activeTaskId !== activeTask.taskId) {
-    state.activeTaskId = activeTask.taskId;
-  }
+  const event = getSelectedEvent();
 
-  detailTitleEl.textContent = "Task Detail";
-  detailSubtitleEl.textContent = selectedCount
-    ? `${selectedCount} task${selectedCount > 1 ? "s" : ""} selected`
-    : "No tasks selected";
-
-  if (!state.tasksLoaded) {
-    detailBodyEl.appendChild(createEmptyState("Loading tasks..."));
+  if (!event) {
+    detailTitleEl.textContent = "Event Detail";
+    detailSubtitleEl.textContent = "";
+    detailBodyEl.appendChild(createEmptyState("Select an event in the timeline to view details."));
     return;
   }
 
-  renderTaskDetail(selectedTasks, activeTask);
-}
+  detailTitleEl.textContent = event.summary || "(no summary)";
+  detailSubtitleEl.textContent = `${event.kind.replace(/_/g, " ")} · ${formatTime(event.ts)}`;
 
-function renderTaskDetail(selectedTasks, activeTask) {
-  if (!selectedTasks.length) {
-    detailBodyEl.appendChild(createEmptyState("Select tasks from the left panel to view details."));
-    return;
-  }
-
-  const list = document.createElement("div");
-  list.className = "task-detail-list";
-
-  selectedTasks.forEach((task) => {
-    const item = document.createElement("button");
-    item.type = "button";
-    item.className = "task-detail-item" + (activeTask?.taskId === task.taskId ? " active" : "");
-    const title = document.createElement("div");
-    title.className = "task-detail-title";
-    title.textContent = taskDisplayTitle(task, 90);
-    const meta = document.createElement("div");
-    meta.className = "task-detail-meta";
-    meta.textContent = `${formatTaskTime(task.startTs)} · ${task.sessionKey}`;
-    item.appendChild(title);
-    item.appendChild(meta);
-    item.addEventListener("click", () => {
-      setActiveTask(task.taskId);
-      focusTask(task);
-    });
-    list.appendChild(item);
-  });
-
-  detailBodyEl.appendChild(list);
-
-  if (!activeTask) {
-    return;
+  if (!state.filteredEventIds.has(getEventKey(event))) {
+    const note = document.createElement("div");
+    note.className = "detail-note";
+    note.textContent = "Selected event is hidden by current filters.";
+    detailBodyEl.appendChild(note);
   }
 
   const meta = document.createElement("dl");
   meta.className = "detail-meta";
-  const durationMs =
-    typeof activeTask.endTs === "number" ? Math.max(0, activeTask.endTs - activeTask.startTs) : null;
   const metaItems = [
-    { label: "Task ID", value: activeTask.taskId },
-    { label: "Session", value: activeTask.sessionKey },
-    { label: "Agent", value: activeTask.agentId },
-    { label: "Start", value: formatTaskTime(activeTask.startTs) },
+    { label: "Kind", value: event.kind },
+    { label: "When", value: formatTime(event.ts) },
+    { label: "Event ID", value: event.id || "-" },
+    { label: "Session", value: event.sessionKey || "-" },
   ];
-  if (activeTask.endTs) {
-    metaItems.push({ label: "End", value: formatTaskTime(activeTask.endTs) });
-  }
-  if (durationMs != null) {
-    metaItems.push({ label: "Duration", value: `${(durationMs / 1000).toFixed(2)}s` });
+  if (event.durationMs != null) {
+    metaItems.push({ label: "Duration", value: `${(event.durationMs / 1000).toFixed(2)}s` });
   }
   metaItems.forEach((item) => {
     const wrapper = document.createElement("div");
@@ -557,86 +515,21 @@ function renderTaskDetail(selectedTasks, activeTask) {
   });
   detailBodyEl.appendChild(meta);
 
-  const messageSection = document.createElement("div");
-  messageSection.className = "detail-section";
-  const messageTitle = document.createElement("div");
-  messageTitle.className = "detail-section-title";
-  messageTitle.textContent = "User Message";
-  const messageText = document.createElement("div");
-  messageText.textContent = activeTask.userMessage || "(no message)";
-  messageSection.appendChild(messageTitle);
-  messageSection.appendChild(messageText);
-  detailBodyEl.appendChild(messageSection);
-
-  const toolSummary = new Map();
-  activeTask.toolCalls?.forEach((call) => {
-    if (!call || !call.toolName) {
-      return;
-    }
-    const entry = toolSummary.get(call.toolName) ?? { tool: call.toolName, count: 0, errors: 0 };
-    entry.count += 1;
-    if (call.isError) {
-      entry.errors += 1;
-    }
-    toolSummary.set(call.toolName, entry);
-  });
-
-  const toolSection = document.createElement("div");
-  toolSection.className = "detail-section";
-  const toolTitle = document.createElement("div");
-  toolTitle.className = "detail-section-title";
-  toolTitle.textContent = "Tool Summary";
-  toolSection.appendChild(toolTitle);
-  if (toolSummary.size === 0) {
+  const detailsSection = document.createElement("div");
+  detailsSection.className = "detail-section";
+  const detailsTitle = document.createElement("div");
+  detailsTitle.className = "detail-section-title";
+  detailsTitle.textContent = "Details JSON";
+  detailsSection.appendChild(detailsTitle);
+  if (typeof event.details === "undefined") {
     const empty = document.createElement("div");
     empty.className = "json-empty";
-    empty.textContent = "(no tool calls)";
-    toolSection.appendChild(empty);
+    empty.textContent = "(no details payload)";
+    detailsSection.appendChild(empty);
   } else {
-    const list = document.createElement("div");
-    list.className = "summary-list";
-    toolSummary.forEach((entry) => {
-      const row = document.createElement("div");
-      row.className = "summary-row";
-      const label = document.createElement("span");
-      label.className = "summary-label";
-      label.textContent = entry.tool;
-      const value = document.createElement("span");
-      value.className = "summary-value";
-      value.textContent = `x${entry.count}${entry.errors ? ` (errors: ${entry.errors})` : ""}`;
-      row.appendChild(label);
-      row.appendChild(value);
-      list.appendChild(row);
-    });
-    toolSection.appendChild(list);
+    detailsSection.appendChild(createJsonTree(event.details));
   }
-  detailBodyEl.appendChild(toolSection);
-
-  if (Array.isArray(activeTask.continuations) && activeTask.continuations.length > 0) {
-    const contSection = document.createElement("div");
-    contSection.className = "detail-section";
-    const contTitle = document.createElement("div");
-    contTitle.className = "detail-section-title";
-    contTitle.textContent = "Continuations";
-    contSection.appendChild(contTitle);
-    const list = document.createElement("div");
-    list.className = "continuation-list";
-    activeTask.continuations.forEach((cont) => {
-      const row = document.createElement("div");
-      row.className = "continuation-row";
-      const kind = document.createElement("span");
-      kind.className = "continuation-kind";
-      kind.textContent = cont.kind;
-      const text = document.createElement("span");
-      text.className = "continuation-text";
-      text.textContent = truncateText(cont.text, 140);
-      row.appendChild(kind);
-      row.appendChild(text);
-      list.appendChild(row);
-    });
-    contSection.appendChild(list);
-    detailBodyEl.appendChild(contSection);
-  }
+  detailBodyEl.appendChild(detailsSection);
 }
 
 function renderEvolutionView() {
@@ -831,6 +724,10 @@ function renderTimeline() {
   });
 
   state.filteredEventIds = new Set(filtered.map((event) => getEventKey(event)));
+
+  if (filtered.length > 0 && !state.filteredEventIds.has(state.selectedEventId)) {
+    state.selectedEventId = getEventKey(filtered[0]);
+  }
 
   if (!filtered.length) {
     timelineEl.appendChild(
