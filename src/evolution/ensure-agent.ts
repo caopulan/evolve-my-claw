@@ -1,9 +1,19 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import JSON5 from "json5";
 import { resolveOpenClawStateDir } from "../paths.js";
 import { EVOLUTION_AGENT_ID, EVOLUTION_AGENT_NAME } from "./constants.js";
+import {
+  loadOpenClawConfig,
+  normalizeAgentId,
+  resolveAgentDir,
+  resolveAgentWorkspaceDir,
+  resolveDefaultAgentId,
+  resolveOpenClawConfigPath,
+  resolveUserPath,
+  type OpenClawConfigRecord,
+  writeOpenClawConfig,
+} from "./openclaw-config.js";
 
 type EnsureEvolutionAgentParams = {
   stateDir?: string;
@@ -29,7 +39,6 @@ type EnsureEvolutionAgentResult = {
   notes: string[];
 };
 
-const LEGACY_CONFIG_NAMES = ["clawdbot.json", "moltbot.json", "moldbot.json"] as const;
 const WORKSPACE_FILES = [
   "AGENTS.md",
   "SOUL.md",
@@ -38,6 +47,8 @@ const WORKSPACE_FILES = [
   "USER.md",
   "HEARTBEAT.md",
 ] as const;
+
+const EVOLUTION_GUIDANCE_MARKER = "## Evolution Workflow";
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -48,54 +59,6 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
-}
-
-function normalizeAgentId(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function resolveUserPath(input: string): string {
-  const trimmed = input.trim();
-  if (!trimmed) {
-    return trimmed;
-  }
-  if (trimmed.startsWith("~")) {
-    return path.resolve(trimmed.replace(/^~(?=$|[\\/])/, os.homedir()));
-  }
-  return path.resolve(trimmed);
-}
-
-function resolveOpenClawConfigPath(stateDir: string, configPath?: string): string {
-  if (configPath && configPath.trim()) {
-    return resolveUserPath(configPath);
-  }
-  const envOverride =
-    process.env.OPENCLAW_CONFIG_PATH?.trim() || process.env.CLAWDBOT_CONFIG_PATH?.trim();
-  if (envOverride) {
-    return resolveUserPath(envOverride);
-  }
-  const candidates = [
-    path.join(stateDir, "openclaw.json"),
-    ...LEGACY_CONFIG_NAMES.map((name) => path.join(stateDir, name)),
-  ];
-  const existing = candidates.find((candidate) => {
-    try {
-      return fs.existsSync(candidate);
-    } catch {
-      return false;
-    }
-  });
-  return existing ?? candidates[0];
-}
-
-function loadOpenClawConfig(configPath: string): { config: Record<string, unknown>; raw?: string } {
-  if (!fs.existsSync(configPath)) {
-    return { config: {} };
-  }
-  const raw = fs.readFileSync(configPath, "utf8");
-  const parsed = JSON5.parse(raw) as unknown;
-  const config = asRecord(parsed) ?? {};
-  return { config, raw };
 }
 
 function resolveAgentsSection(config: Record<string, unknown>): Record<string, unknown> {
@@ -115,65 +78,14 @@ function resolveAgentList(agents: Record<string, unknown>): Array<Record<string,
   return agents.list.filter((entry) => asRecord(entry)) as Array<Record<string, unknown>>;
 }
 
-function resolveDefaultAgentId(config: Record<string, unknown>): string {
-  const agents = asRecord(config.agents);
-  const list = agents ? resolveAgentList(agents) : [];
-  if (list.length === 0) {
-    return "main";
-  }
-  const defaultEntry = list.find((entry) => entry.default === true);
-  const idRaw = asString(defaultEntry?.id ?? list[0]?.id) ?? "main";
-  return normalizeAgentId(idRaw);
-}
-
-function resolveAgentWorkspaceDir(
-  config: Record<string, unknown>,
-  agentId: string,
-): string {
-  const normalized = normalizeAgentId(agentId);
-  const agents = asRecord(config.agents);
-  const list = agents ? resolveAgentList(agents) : [];
-  const entry = list.find((item) => normalizeAgentId(asString(item.id) ?? "") === normalized);
-  const entryWorkspace = asString(entry?.workspace);
-  if (entryWorkspace) {
-    return resolveUserPath(entryWorkspace);
-  }
-  const defaultAgentId = resolveDefaultAgentId(config);
-  if (normalized === defaultAgentId) {
-    const defaults = agents ? asRecord(agents.defaults) : undefined;
-    const defaultWorkspace = asString(defaults?.workspace);
-    if (defaultWorkspace) {
-      return resolveUserPath(defaultWorkspace);
-    }
-    return path.join(os.homedir(), ".openclaw", "workspace");
-  }
-  return path.join(os.homedir(), ".openclaw", `workspace-${normalized}`);
-}
-
-function resolveAgentDir(
-  config: Record<string, unknown>,
-  agentId: string,
-  stateDir: string,
-): string {
-  const normalized = normalizeAgentId(agentId);
-  const agents = asRecord(config.agents);
-  const list = agents ? resolveAgentList(agents) : [];
-  const entry = list.find((item) => normalizeAgentId(asString(item.id) ?? "") === normalized);
-  const entryDir = asString(entry?.agentDir);
-  if (entryDir) {
-    return resolveUserPath(entryDir);
-  }
-  return path.join(stateDir, "agents", normalized, "agent");
-}
-
 function pathsEqual(left: string, right: string): boolean {
   return path.resolve(left) === path.resolve(right);
 }
 
 function ensureEvolutionAgentConfig(params: {
-  config: Record<string, unknown>;
+  config: OpenClawConfigRecord;
   stateDir: string;
-}): { config: Record<string, unknown>; changed: boolean } {
+}): { config: OpenClawConfigRecord; changed: boolean } {
   const { config, stateDir } = params;
   const agents = resolveAgentsSection(config);
   let list = resolveAgentList(agents);
@@ -357,6 +269,40 @@ function ensureWorkspaceFiles(params: {
   };
 }
 
+function evolutionGuidanceBlock(): string {
+  return [
+    "",
+    EVOLUTION_GUIDANCE_MARKER,
+    "",
+    "Purpose: analyze selected tasks and propose targeted, high-signal improvements.",
+    "",
+    "Rules:",
+    "- Only analyze the tasks explicitly selected by the user.",
+    "- Respect the chosen analysis dimensions and change targets.",
+    "- Prefer minimal, high-impact modifications; avoid changes without clear benefit.",
+    "- Provide concrete reasons, evidence, and expected impact for every recommendation.",
+    "",
+    "Change execution:",
+    "- Use structured JSON changes with explicit file targets and safe operations.",
+    "- Config edits should be merge patches limited to agents/bindings/tools/session/plugins/hooks/skills.",
+    "- File edits should be append/replace/write with precise search strings.",
+    "- Paths must stay within allowed OpenClaw workspaces or managed hooks/skills.",
+  ].join("\n");
+}
+
+function maybeAppendEvolutionGuidance(workspaceDir: string): boolean {
+  const agentsPath = path.join(workspaceDir, "AGENTS.md");
+  if (!fs.existsSync(agentsPath)) {
+    return false;
+  }
+  const raw = fs.readFileSync(agentsPath, "utf8");
+  if (raw.includes(EVOLUTION_GUIDANCE_MARKER)) {
+    return false;
+  }
+  fs.appendFileSync(agentsPath, `${evolutionGuidanceBlock()}\n`, "utf8");
+  return true;
+}
+
 function ensureAgentDirFiles(params: {
   agentDir: string;
   sourceAgentDir?: string;
@@ -395,21 +341,6 @@ function ensureAgentDirFiles(params: {
   };
 }
 
-function writeOpenClawConfig(params: {
-  configPath: string;
-  config: Record<string, unknown>;
-}): { backupPath?: string } {
-  const { configPath, config } = params;
-  let backupPath: string | undefined;
-  if (fs.existsSync(configPath)) {
-    backupPath = `${configPath}.bak.evolve-my-claw.${Date.now()}`;
-    fs.copyFileSync(configPath, backupPath);
-  }
-  const serialized = `${JSON.stringify(config, null, 2)}\n`;
-  fs.writeFileSync(configPath, serialized, "utf8");
-  return { backupPath };
-}
-
 export function ensureEvolutionAgent(
   params: EnsureEvolutionAgentParams = {},
 ): EnsureEvolutionAgentResult {
@@ -436,6 +367,8 @@ export function ensureEvolutionAgent(
     copySkills: params.copySkills ?? true,
   });
 
+  const appendedGuidance = maybeAppendEvolutionGuidance(workspaceDir);
+
   const agentFiles = ensureAgentDirFiles({
     agentDir,
     sourceAgentDir,
@@ -450,6 +383,9 @@ export function ensureEvolutionAgent(
   }
   if (agentFiles.copiedModels) {
     notes.push("Copied models registry from source agent.");
+  }
+  if (appendedGuidance) {
+    notes.push("Appended evolution guidance to AGENTS.md.");
   }
 
   return {

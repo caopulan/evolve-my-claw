@@ -90,6 +90,21 @@ node dist/cli.js evolution
 This ensures an `evolve-my-claw` agent exists in OpenClaw with its own workspace
 and full tools/skills enabled.
 
+## Evolution analysis (UI)
+
+1. Open the UI (`node dist/cli.js serve`).
+2. Select tasks in the sidebar.
+3. Switch to the **Evolution** tab.
+4. Choose analysis dimensions + change targets, then click **Run evolution analysis**.
+
+Reports are written to:
+
+```
+~/.openclaw/evolve-my-claw/evolution.reports.jsonl
+```
+
+Each change can be applied from the UI (safe, scoped file operations + config merge patches).
+
 ## Notes
 
 - Tool start/update events are not globally broadcast by the gateway. The UI relies on session transcripts for tool timing.

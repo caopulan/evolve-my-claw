@@ -29,6 +29,13 @@ const state = {
   selectedEventId: null,
   search: "",
   expandedEventIds: new Set(),
+  evolutionReports: [],
+  evolutionRunning: false,
+  evolutionDimensions: new Set(["per_task_tool_quality", "cross_task_patterns"]),
+  evolutionChangeTargets: new Set(["openclaw_config", "agent_persona", "hooks", "plugins", "skills"]),
+  evolutionNotice: "",
+  applyingChanges: new Set(),
+  appliedChanges: new Set(),
 };
 
 const sessionsEl = document.getElementById("sessions");
@@ -40,6 +47,7 @@ const detailTitleEl = document.getElementById("detail-title");
 const detailSubtitleEl = document.getElementById("detail-subtitle");
 const detailBodyEl = document.getElementById("detail-body");
 const evolutionContentEl = document.getElementById("evolution-content");
+const evolutionControlsEl = document.getElementById("evolution-controls");
 const evolutionSubtitleEl = document.getElementById("evolution-subtitle");
 const viewTabs = Array.from(document.querySelectorAll(".view-option"));
 const viewSwitchEl = document.querySelector(".view-switch");
@@ -49,6 +57,9 @@ const evolutionViewEl = document.getElementById("evolution-view");
 const mainEl = document.querySelector(".main");
 
 const SELECTED_TASKS_KEY = "emc_selected_tasks";
+const EVOLUTION_DIMENSIONS_KEY = "emc_evolution_dimensions";
+const EVOLUTION_CHANGE_TARGETS_KEY = "emc_evolution_change_targets";
+const EVOLUTION_APPLIED_CHANGES_KEY = "emc_evolution_applied_changes";
 
 function formatTime(ts) {
   const date = new Date(ts);
@@ -192,6 +203,27 @@ function truncateText(text, max = 80) {
   return `${trimmed.slice(0, max)}…`;
 }
 
+const DIMENSION_LABELS = {
+  per_task_tool_quality: "Per-task tool review",
+  cross_task_patterns: "Cross-task patterns",
+};
+
+const CHANGE_TARGET_LABELS = {
+  openclaw_config: "openclaw.json",
+  agent_persona: "Agent persona",
+  hooks: "Hooks",
+  plugins: "Plugins",
+  skills: "Skills",
+};
+
+function formatDimensionLabel(value) {
+  return DIMENSION_LABELS[value] || value;
+}
+
+function formatChangeTargetLabel(value) {
+  return CHANGE_TARGET_LABELS[value] || value;
+}
+
 function stripLeadingTimestamp(text) {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -262,6 +294,29 @@ function getSelectedTasks() {
     }
   });
   return selected.sort((a, b) => a.startTs - b.startTs);
+}
+
+function getSelectedTaskIdsArray() {
+  return [...state.selectedTaskIds];
+}
+
+function reportMatchesTaskSelection(report, taskIds) {
+  if (!Array.isArray(report?.taskIds)) {
+    return false;
+  }
+  if (report.taskIds.length !== taskIds.length) {
+    return false;
+  }
+  const requested = new Set(taskIds);
+  return report.taskIds.every((id) => requested.has(id));
+}
+
+function listReportsForSelection() {
+  const taskIds = getSelectedTaskIdsArray();
+  if (!taskIds.length) {
+    return [];
+  }
+  return state.evolutionReports.filter((report) => reportMatchesTaskSelection(report, taskIds));
 }
 
 function setActiveTask(taskId) {
@@ -348,7 +403,43 @@ function persistSelectedTaskIds() {
   }
 }
 
+function loadStringSet(key, fallback = []) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) {
+      return new Set(fallback);
+    }
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return new Set(parsed.filter((item) => typeof item === "string"));
+    }
+  } catch {
+    // ignore
+  }
+  return new Set(fallback);
+}
+
+function persistStringSet(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify([...value]));
+  } catch {
+    // ignore
+  }
+}
+
 state.selectedTaskIds = loadSelectedTaskIds();
+state.evolutionDimensions = loadStringSet(EVOLUTION_DIMENSIONS_KEY, [
+  "per_task_tool_quality",
+  "cross_task_patterns",
+]);
+state.evolutionChangeTargets = loadStringSet(EVOLUTION_CHANGE_TARGETS_KEY, [
+  "openclaw_config",
+  "agent_persona",
+  "hooks",
+  "plugins",
+  "skills",
+]);
+state.appliedChanges = loadStringSet(EVOLUTION_APPLIED_CHANGES_KEY, []);
 
 function formatJsonValue(value) {
   if (typeof value === "string") {
@@ -770,10 +861,13 @@ function renderDetailPanel() {
 }
 
 function renderEvolutionView() {
-  if (!evolutionContentEl) {
+  if (!evolutionContentEl || !evolutionControlsEl) {
     return;
   }
+
+  evolutionControlsEl.innerHTML = "";
   evolutionContentEl.innerHTML = "";
+
   const selectedTasks = getSelectedTasks();
   const selectedCount = selectedTasks.length;
 
@@ -783,146 +877,212 @@ function renderEvolutionView() {
       : "No tasks selected";
   }
 
+  const controls = document.createElement("div");
+  controls.className = "evolution-controls-grid";
+
+  const dimensionSection = document.createElement("div");
+  dimensionSection.className = "evolution-section";
+  const dimTitle = document.createElement("div");
+  dimTitle.className = "evolution-section-title";
+  dimTitle.textContent = "Analysis dimensions";
+  dimensionSection.appendChild(dimTitle);
+  Object.keys(DIMENSION_LABELS).forEach((key) => {
+    const label = document.createElement("label");
+    label.className = "evolution-option";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = state.evolutionDimensions.has(key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        state.evolutionDimensions.add(key);
+      } else {
+        state.evolutionDimensions.delete(key);
+      }
+      persistStringSet(EVOLUTION_DIMENSIONS_KEY, state.evolutionDimensions);
+    });
+    const span = document.createElement("span");
+    span.textContent = formatDimensionLabel(key);
+    label.appendChild(checkbox);
+    label.appendChild(span);
+    dimensionSection.appendChild(label);
+  });
+  controls.appendChild(dimensionSection);
+
+  const targetSection = document.createElement("div");
+  targetSection.className = "evolution-section";
+  const targetTitle = document.createElement("div");
+  targetTitle.className = "evolution-section-title";
+  targetTitle.textContent = "Change targets";
+  targetSection.appendChild(targetTitle);
+  Object.keys(CHANGE_TARGET_LABELS).forEach((key) => {
+    const label = document.createElement("label");
+    label.className = "evolution-option";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = state.evolutionChangeTargets.has(key);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        state.evolutionChangeTargets.add(key);
+      } else {
+        state.evolutionChangeTargets.delete(key);
+      }
+      persistStringSet(EVOLUTION_CHANGE_TARGETS_KEY, state.evolutionChangeTargets);
+    });
+    const span = document.createElement("span");
+    span.textContent = formatChangeTargetLabel(key);
+    label.appendChild(checkbox);
+    label.appendChild(span);
+    targetSection.appendChild(label);
+  });
+  controls.appendChild(targetSection);
+
+  const actionSection = document.createElement("div");
+  actionSection.className = "evolution-section evolution-action";
+  const runButton = document.createElement("button");
+  runButton.type = "button";
+  runButton.className = "evolution-run";
+  runButton.textContent = state.evolutionRunning ? "Running..." : "Run evolution analysis";
+  runButton.disabled = state.evolutionRunning;
+  runButton.addEventListener("click", runEvolutionAnalysis);
+  actionSection.appendChild(runButton);
+
+  if (state.evolutionNotice) {
+    const notice = document.createElement("div");
+    notice.className = "evolution-notice";
+    notice.textContent = state.evolutionNotice;
+    actionSection.appendChild(notice);
+  }
+  controls.appendChild(actionSection);
+  evolutionControlsEl.appendChild(controls);
+
   if (!selectedTasks.length) {
-    evolutionContentEl.appendChild(createEmptyState("Select tasks to view evolution analysis."));
+    evolutionContentEl.appendChild(createEmptyState("Select tasks to run evolution analysis."));
     return;
   }
 
-  if (!state.analysesLoaded) {
-    evolutionContentEl.appendChild(createEmptyState("Loading evolution analysis..."));
-    return;
-  }
-
-  const container = document.createElement("div");
-  container.className = "analysis-list";
+  const selectedWrap = document.createElement("div");
+  selectedWrap.className = "evolution-selected";
   selectedTasks.forEach((task) => {
-    const record = state.analysesByTask?.get(task.taskId);
-    const card = document.createElement("div");
-    card.className = "analysis-card";
+    const pill = document.createElement("span");
+    pill.className = "evolution-pill";
+    pill.textContent = taskDisplayTitle(task, 60);
+    selectedWrap.appendChild(pill);
+  });
+  evolutionContentEl.appendChild(selectedWrap);
+
+  if (state.evolutionRunning) {
+    evolutionContentEl.appendChild(createEmptyState("Running evolution analysis..."));
+    return;
+  }
+
+  const reports = listReportsForSelection();
+  if (!reports.length) {
+    evolutionContentEl.appendChild(
+      createEmptyState("No evolution report found for this selection. Run analysis to generate."),
+    );
+    return;
+  }
+
+  reports.forEach((report) => {
+    const reportCard = document.createElement("div");
+    reportCard.className = "evolution-report";
 
     const header = document.createElement("div");
-    header.className = "analysis-header";
+    header.className = "evolution-report-header";
     const title = document.createElement("div");
-    title.className = "analysis-title";
-    title.textContent = taskDisplayTitle(task, 90);
+    title.className = "evolution-report-title";
+    title.textContent = report.summary || "Evolution report";
     const meta = document.createElement("div");
-    meta.className = "analysis-meta";
-    meta.textContent = formatTaskTime(task.startTs);
+    meta.className = "evolution-report-meta";
+    const dims = (report.dimensions || []).map(formatDimensionLabel).join(" · ");
+    const targets = (report.changeTargets || []).map(formatChangeTargetLabel).join(" · ");
+    meta.textContent = `${formatTaskTime(report.createdAt)} · ${dims || "no dimensions"} · ${
+      targets || "no targets"
+    }`;
     header.appendChild(title);
     header.appendChild(meta);
-    card.appendChild(header);
+    reportCard.appendChild(header);
 
-    if (!record) {
-      const empty = document.createElement("div");
-      empty.className = "analysis-empty";
-      empty.textContent = "No analysis found. Run `node dist/cli.js analyze` to generate.";
-      card.appendChild(empty);
-      container.appendChild(card);
-      return;
-    }
+    (report.items || []).forEach((item) => {
+      const itemCard = document.createElement("div");
+      itemCard.className = "evolution-item";
 
-    const statusRow = document.createElement("div");
-    statusRow.className = "analysis-status";
-    const status = document.createElement("span");
-    status.className = `analysis-pill status-${record.analysis?.status ?? "unknown"}`;
-    status.textContent = record.analysis?.status ?? "unknown";
-    const confidence = document.createElement("span");
-    confidence.className = "analysis-pill";
-    confidence.textContent = `confidence ${(record.analysis?.confidence ?? 0).toFixed(2)}`;
-    statusRow.appendChild(status);
-    statusRow.appendChild(confidence);
-    card.appendChild(statusRow);
+      const itemHeader = document.createElement("div");
+      itemHeader.className = "evolution-item-header";
+      const itemTitle = document.createElement("div");
+      itemTitle.className = "evolution-item-title";
+      itemTitle.textContent = item.title || "Untitled finding";
+      const badge = document.createElement("span");
+      badge.className = `evolution-badge severity-${item.severity || "low"}`;
+      badge.textContent = `${item.scope || "task"} · ${item.severity || "low"}`;
+      itemHeader.appendChild(itemTitle);
+      itemHeader.appendChild(badge);
+      itemCard.appendChild(itemHeader);
 
-    if (record.analysis?.summary) {
-      const summary = document.createElement("div");
-      summary.className = "analysis-summary";
-      setMarkdown(summary, record.analysis.summary, "block");
-      card.appendChild(summary);
-    }
-
-    const detail = document.createElement("div");
-    detail.className = "analysis-detail";
-    const fields = [
-      { label: "Type", value: record.analysis?.task_type },
-      { label: "Merge", value: record.analysis?.merge_key },
-    ];
-    fields.forEach((field) => {
-      if (!field.value) {
-        return;
+      if (item.reasoning) {
+        const reasoning = document.createElement("div");
+        reasoning.className = "evolution-text";
+        setMarkdown(reasoning, item.reasoning, "block");
+        itemCard.appendChild(reasoning);
       }
-      const row = document.createElement("div");
-      row.className = "analysis-field";
-      const key = document.createElement("span");
-      key.className = "analysis-key";
-      key.textContent = field.label;
-      const value = document.createElement("span");
-      value.className = "analysis-value";
-      value.textContent = field.value;
-      row.appendChild(key);
-      row.appendChild(value);
-      detail.appendChild(row);
+      if (item.evidence) {
+        const evidence = document.createElement("div");
+        evidence.className = "evolution-evidence";
+        setMarkdown(evidence, item.evidence, "block");
+        itemCard.appendChild(evidence);
+      }
+      if (item.recommendation) {
+        const recommendation = document.createElement("div");
+        recommendation.className = "evolution-recommendation";
+        setMarkdown(recommendation, item.recommendation, "block");
+        itemCard.appendChild(recommendation);
+      }
+
+      if (Array.isArray(item.changes) && item.changes.length > 0) {
+        const changeList = document.createElement("div");
+        changeList.className = "evolution-change-list";
+        item.changes.forEach((change) => {
+          const changeCard = document.createElement("div");
+          changeCard.className = "evolution-change";
+          const changeTitle = document.createElement("div");
+          changeTitle.className = "evolution-change-title";
+          changeTitle.textContent = change.summary || "Proposed change";
+          changeCard.appendChild(changeTitle);
+
+          if (change.reason) {
+            const changeReason = document.createElement("div");
+            changeReason.className = "evolution-change-reason";
+            setMarkdown(changeReason, change.reason, "block");
+            changeCard.appendChild(changeReason);
+          }
+
+          const changeMeta = document.createElement("div");
+          changeMeta.className = "evolution-change-meta";
+          const target = change.target?.path || change.target?.kind || "unknown";
+          const op = change.operation?.type || "operation";
+          changeMeta.textContent = `${target} · ${op}`;
+          changeCard.appendChild(changeMeta);
+
+          const applyButton = document.createElement("button");
+          applyButton.type = "button";
+          applyButton.className = "evolution-apply";
+          const applied = state.appliedChanges.has(change.changeId);
+          applyButton.textContent = applied ? "Applied" : "Apply change";
+          applyButton.disabled = applied || state.applyingChanges.has(change.changeId);
+          applyButton.addEventListener("click", () =>
+            applyEvolutionChange(report.reportId, change.changeId),
+          );
+          changeCard.appendChild(applyButton);
+          changeList.appendChild(changeCard);
+        });
+        itemCard.appendChild(changeList);
+      }
+
+      reportCard.appendChild(itemCard);
     });
-    card.appendChild(detail);
 
-    if (Array.isArray(record.analysis?.issues) && record.analysis.issues.length > 0) {
-      const issues = document.createElement("div");
-      issues.className = "analysis-section";
-      const titleEl = document.createElement("div");
-      titleEl.className = "analysis-section-title";
-      titleEl.textContent = "Issues";
-      issues.appendChild(titleEl);
-      record.analysis.issues.forEach((issue) => {
-        const item = document.createElement("div");
-        item.className = "analysis-item";
-        setMarkdown(item, issue);
-        issues.appendChild(item);
-      });
-      card.appendChild(issues);
-    }
-
-    if (Array.isArray(record.analysis?.suggestions) && record.analysis.suggestions.length > 0) {
-      const suggestions = document.createElement("div");
-      suggestions.className = "analysis-section";
-      const titleEl = document.createElement("div");
-      titleEl.className = "analysis-section-title";
-      titleEl.textContent = "Suggestions";
-      suggestions.appendChild(titleEl);
-      record.analysis.suggestions.forEach((suggestion) => {
-        const item = document.createElement("div");
-        item.className = "analysis-item";
-        setMarkdown(item, suggestion);
-        suggestions.appendChild(item);
-      });
-      card.appendChild(suggestions);
-    }
-
-    if (Array.isArray(record.analysis?.steps) && record.analysis.steps.length > 0) {
-      const steps = document.createElement("div");
-      steps.className = "analysis-section";
-      const titleEl = document.createElement("div");
-      titleEl.className = "analysis-section-title";
-      titleEl.textContent = "Steps";
-      steps.appendChild(titleEl);
-      record.analysis.steps.forEach((step) => {
-        const item = document.createElement("div");
-        item.className = "analysis-item";
-        setMarkdown(item, step.evidence ? `${step.what} (${step.evidence})` : step.what);
-        steps.appendChild(item);
-      });
-      card.appendChild(steps);
-    }
-
-    if (record.parseError) {
-      const error = document.createElement("div");
-      error.className = "analysis-error";
-      error.textContent = `Parse error: ${record.parseError}`;
-      card.appendChild(error);
-    }
-
-    container.appendChild(card);
+    evolutionContentEl.appendChild(reportCard);
   });
-
-  evolutionContentEl.appendChild(container);
 }
 
 function eventMatchesSearch(event, search) {
@@ -1189,6 +1349,89 @@ async function loadAnalyses() {
   }
 }
 
+async function loadEvolutionReports() {
+  try {
+    const res = await fetch("/api/evolution/reports");
+    const data = await res.json();
+    const reports = Array.isArray(data.reports) ? data.reports : [];
+    state.evolutionReports = reports;
+    renderEvolutionView();
+  } catch {
+    renderEvolutionView();
+  }
+}
+
+async function runEvolutionAnalysis() {
+  const taskIds = getSelectedTaskIdsArray();
+  if (!taskIds.length) {
+    state.evolutionNotice = "Select tasks before running evolution analysis.";
+    renderEvolutionView();
+    return;
+  }
+  const dimensions = [...state.evolutionDimensions];
+  const changeTargets = [...state.evolutionChangeTargets];
+  if (!dimensions.length || !changeTargets.length) {
+    state.evolutionNotice = "Select at least one dimension and change target.";
+    renderEvolutionView();
+    return;
+  }
+  state.evolutionRunning = true;
+  state.evolutionNotice = "";
+  renderEvolutionView();
+  try {
+    const res = await fetch("/api/evolution/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskIds, dimensions, changeTargets }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      state.evolutionNotice = data?.error || "Evolution analysis failed.";
+    } else if (data?.report) {
+      state.evolutionReports = [data.report, ...state.evolutionReports];
+      state.evolutionNotice = "Evolution analysis completed.";
+    }
+  } catch {
+    state.evolutionNotice = "Evolution analysis failed.";
+  } finally {
+    state.evolutionRunning = false;
+    renderEvolutionView();
+  }
+}
+
+async function applyEvolutionChange(reportId, changeId) {
+  if (!reportId || !changeId) {
+    return;
+  }
+  if (state.applyingChanges.has(changeId)) {
+    return;
+  }
+  state.applyingChanges.add(changeId);
+  renderEvolutionView();
+  try {
+    const res = await fetch("/api/evolution/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reportId, changeId }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      state.evolutionNotice = data?.error || "Apply failed.";
+    } else {
+      state.appliedChanges.add(changeId);
+      persistStringSet(EVOLUTION_APPLIED_CHANGES_KEY, state.appliedChanges);
+      state.evolutionNotice = data?.requiresRestart
+        ? "Change applied. Restart OpenClaw Gateway to take effect."
+        : "Change applied.";
+    }
+  } catch {
+    state.evolutionNotice = "Apply failed.";
+  } finally {
+    state.applyingChanges.delete(changeId);
+    renderEvolutionView();
+  }
+}
+
 async function loadTimeline(sessionKey) {
   state.activeSessionKey = sessionKey;
   updateActiveSessionCard();
@@ -1248,4 +1491,5 @@ wireFilters();
 loadSessions();
 loadTasks();
 loadAnalyses();
+loadEvolutionReports();
 renderTimeline();

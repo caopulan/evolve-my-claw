@@ -110,6 +110,21 @@ node dist/cli.js evolution
 该命令会确保 OpenClaw 中存在 `evolve-my-claw` agent，并创建独立的 workspace 文件，
 同时启用全量 tools/skills。
 
+## Evolution 分析（UI）
+
+1. 启动 UI（`node dist/cli.js serve`）
+2. 在左侧勾选任务
+3. 切换到 **Evolution** 标签
+4. 选择分析维度 + 修改目标，点击 **Run evolution analysis**
+
+报告会写入：
+
+```
+~/.openclaw/evolve-my-claw/evolution.reports.jsonl
+```
+
+每条修改建议可在 UI 中点击执行（安全的配置 merge patch + 文件修改）。
+
 ## 常见参数
 
 - `--state-dir <dir>`：指定 OpenClaw 状态目录
