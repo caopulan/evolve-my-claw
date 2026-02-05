@@ -34,15 +34,14 @@ const sessionsEl = document.getElementById("sessions");
 const timelineEl = document.getElementById("timeline");
 const sessionTitleEl = document.getElementById("session-title");
 const sessionSubtitleEl = document.getElementById("session-subtitle");
-const sessionCountEl = document.getElementById("session-count");
-const sessionChipsEl = document.getElementById("session-chips");
 const searchEl = document.getElementById("search");
 const detailTitleEl = document.getElementById("detail-title");
 const detailSubtitleEl = document.getElementById("detail-subtitle");
 const detailBodyEl = document.getElementById("detail-body");
 const evolutionContentEl = document.getElementById("evolution-content");
 const evolutionSubtitleEl = document.getElementById("evolution-subtitle");
-const viewTabs = Array.from(document.querySelectorAll(".view-tab"));
+const viewTabs = Array.from(document.querySelectorAll(".view-option"));
+const viewSwitchEl = document.querySelector(".view-switch");
 const taskViewEl = document.getElementById("task-view");
 const evolutionViewEl = document.getElementById("evolution-view");
 const mainEl = document.querySelector(".main");
@@ -291,8 +290,14 @@ function focusTask(task) {
 function setMainView(view) {
   state.mainView = view;
   viewTabs.forEach((btn) => {
-    btn.classList.toggle("active", btn.getAttribute("data-view") === view);
+    const isActive = btn.getAttribute("data-view") === view;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-selected", isActive ? "true" : "false");
+    btn.setAttribute("tabindex", isActive ? "0" : "-1");
   });
+  if (viewSwitchEl) {
+    viewSwitchEl.setAttribute("data-active", view);
+  }
   if (taskViewEl) {
     taskViewEl.classList.toggle("active", view === "task");
   }
@@ -537,10 +542,6 @@ function selectEvent(eventId) {
 
 function renderSessions() {
   sessionsEl.innerHTML = "";
-
-  if (sessionCountEl) {
-    sessionCountEl.textContent = String(state.sessions.length);
-  }
 
   if (!state.sessions.length) {
     sessionsEl.appendChild(createEmptyState("No sessions found"));
@@ -1117,21 +1118,6 @@ function renderTimeline() {
   renderDetailPanel();
 }
 
-function updateSessionChips(events) {
-  if (!sessionChipsEl) {
-    return;
-  }
-  sessionChipsEl.innerHTML = "";
-  if (!events || !events.length) {
-    return;
-  }
-
-  const chip = document.createElement("span");
-  chip.className = "chip";
-  chip.textContent = `${events.length} events`;
-  sessionChipsEl.appendChild(chip);
-}
-
 async function loadSessions() {
   const res = await fetch("/api/sessions");
   const data = await res.json();
@@ -1211,7 +1197,6 @@ async function loadTimeline(sessionKey) {
   sessionSubtitleEl.textContent = data.session
     ? `${data.session.kind} · ${data.session.agentId}`
     : "";
-  updateSessionChips(state.events);
   renderTimeline();
 }
 
@@ -1248,9 +1233,7 @@ viewTabs.forEach((tab) => {
   });
 });
 
-if (mainEl) {
-  mainEl.setAttribute("data-view", state.mainView);
-}
+setMainView(state.mainView);
 
 wireFilters();
 loadSessions();

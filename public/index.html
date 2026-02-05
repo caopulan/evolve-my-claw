@@ -36,9 +36,10 @@
               <h2 id="session-title">Select a session</h2>
               <p id="session-subtitle" class="muted"></p>
             </div>
-            <div class="view-toggle">
-              <button class="view-tab active" type="button" data-view="task">Task</button>
-              <button class="view-tab" type="button" data-view="evolution">Evolution</button>
+            <div class="view-switch" data-active="task" role="tablist" aria-label="Panel">
+              <button class="view-option active" type="button" data-view="task" role="tab">Task</button>
+              <button class="view-option" type="button" data-view="evolution" role="tab">Evolution</button>
+              <span class="view-indicator" aria-hidden="true"></span>
             </div>
           </div>
         </div>

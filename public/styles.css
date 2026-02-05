@@ -425,45 +425,65 @@ body::after {
   flex-wrap: wrap;
 }
 
-.view-toggle {
-  display: inline-flex;
-  gap: 12px;
-  perspective: 600px;
+.view-switch {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  padding: 6px;
+  border-radius: 999px;
+  background: rgba(12, 16, 24, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 14px 24px rgba(0, 0, 0, 0.25);
+  min-width: 220px;
+  transform-style: preserve-3d;
+  perspective: 700px;
 }
 
-.view-tab {
+.view-option {
   position: relative;
-  padding: 10px 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: linear-gradient(180deg, rgba(24, 30, 40, 0.95), rgba(16, 20, 28, 0.95));
-  color: var(--ink-soft);
+  z-index: 2;
+  padding: 10px 0;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.26em;
   cursor: pointer;
-  transition: transform 0.35s ease, box-shadow 0.35s ease, border 0.3s ease, color 0.3s ease;
-  transform-style: preserve-3d;
-  transform: rotateX(12deg);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
-  appearance: none;
+  transition: color 0.3s ease;
 }
 
-.view-tab.active {
-  border-color: rgba(94, 241, 198, 0.6);
-  background: linear-gradient(180deg, rgba(30, 46, 48, 0.95), rgba(18, 28, 30, 0.95));
+.view-option.active {
   color: #e9fff7;
-  transform: rotateX(0deg);
-  box-shadow: 0 18px 30px rgba(94, 241, 198, 0.25);
 }
 
-.view-tab::after {
+.view-indicator {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: calc(50% - 6px);
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(36, 60, 64, 0.95), rgba(18, 30, 32, 0.95));
+  box-shadow: 0 18px 28px rgba(94, 241, 198, 0.2);
+  transform: translateX(0) rotateX(6deg);
+  transition: transform 0.35s ease, box-shadow 0.35s ease;
+  pointer-events: none;
+}
+
+.view-switch[data-active="evolution"] .view-indicator {
+  transform: translateX(100%) rotateX(-6deg);
+}
+
+.view-switch::after {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 14px;
-  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.2), transparent 70%);
-  opacity: 0.35;
+  border-radius: 999px;
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.18), transparent 70%);
+  opacity: 0.3;
   pointer-events: none;
 }
 
