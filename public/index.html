@@ -50,45 +50,50 @@
           </div>
         </div>
         <section id="task-view" class="view active">
-          <div class="filters">
-            <span class="filters-label">Filters</span>
-            <label class="filter-pill">
-              <input type="checkbox" data-kind="user_message" checked />
-              <span>User</span>
-            </label>
-            <label class="filter-pill">
-              <input type="checkbox" data-kind="assistant_message" checked />
-              <span>Assistant</span>
-            </label>
-            <label class="filter-pill">
-              <input type="checkbox" data-kind="tool" checked />
-              <span>Tools</span>
-            </label>
-            <label class="filter-pill">
-              <input type="checkbox" data-kind="subagent_run" checked />
-              <span>Subagents</span>
-            </label>
-            <label class="filter-pill">
-              <input type="checkbox" data-kind="compaction" checked />
-              <span>Compaction</span>
-            </label>
-            <label class="filter-pill">
-              <input type="checkbox" data-kind="agent_event" checked />
-              <span>Agent events</span>
-            </label>
-            <label class="filter-pill">
-              <input type="checkbox" data-kind="model_change" checked />
-              <span>Model</span>
-            </label>
-            <label class="filter-pill">
-              <input type="checkbox" data-kind="thinking_level_change" checked />
-              <span>Thinking</span>
-            </label>
-            <label class="filter-pill">
-              <input type="checkbox" data-kind="session_info" checked />
-              <span>Session info</span>
-            </label>
-          </div>
+          <details class="filters">
+            <summary class="filters-summary">
+              <span class="filters-label">Filters</span>
+              <span class="filters-hint">Toggle</span>
+            </summary>
+            <div class="filters-panel">
+              <label class="filter-pill">
+                <input type="checkbox" data-kind="user_message" checked />
+                <span>User</span>
+              </label>
+              <label class="filter-pill">
+                <input type="checkbox" data-kind="assistant_message" checked />
+                <span>Assistant</span>
+              </label>
+              <label class="filter-pill">
+                <input type="checkbox" data-kind="tool" checked />
+                <span>Tools</span>
+              </label>
+              <label class="filter-pill">
+                <input type="checkbox" data-kind="subagent_run" checked />
+                <span>Subagents</span>
+              </label>
+              <label class="filter-pill">
+                <input type="checkbox" data-kind="compaction" checked />
+                <span>Compaction</span>
+              </label>
+              <label class="filter-pill">
+                <input type="checkbox" data-kind="agent_event" checked />
+                <span>Agent events</span>
+              </label>
+              <label class="filter-pill">
+                <input type="checkbox" data-kind="model_change" checked />
+                <span>Model</span>
+              </label>
+              <label class="filter-pill">
+                <input type="checkbox" data-kind="thinking_level_change" checked />
+                <span>Thinking</span>
+              </label>
+              <label class="filter-pill">
+                <input type="checkbox" data-kind="session_info" checked />
+                <span>Session info</span>
+              </label>
+            </div>
+          </details>
           <div class="content-grid">
             <section class="timeline-wrap">
               <div id="timeline" class="timeline"></div>
