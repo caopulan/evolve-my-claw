@@ -36,67 +36,68 @@
               <h2 id="session-title">Select a session</h2>
               <p id="session-subtitle" class="muted"></p>
             </div>
-            <div id="session-chips" class="session-chips"></div>
-          </div>
-          <div class="toolbar-right">
             <div class="view-toggle">
               <button class="view-tab active" type="button" data-view="task">Task</button>
               <button class="view-tab" type="button" data-view="evolution">Evolution</button>
             </div>
-            <label class="search-wrap">
-              <span class="search-label">Search</span>
-              <input id="search" type="search" placeholder="Search timeline" />
-            </label>
           </div>
         </div>
         <section id="task-view" class="view active">
-          <details class="filters">
-            <summary class="filters-summary">
-              <span class="filters-label">Filters</span>
-            </summary>
-            <div class="filters-panel">
-              <label class="filter-pill">
-                <input type="checkbox" data-kind="user_message" checked />
-                <span>User</span>
-              </label>
-              <label class="filter-pill">
-                <input type="checkbox" data-kind="assistant_message" checked />
-                <span>Assistant</span>
-              </label>
-              <label class="filter-pill">
-                <input type="checkbox" data-kind="tool" checked />
-                <span>Tools</span>
-              </label>
-              <label class="filter-pill">
-                <input type="checkbox" data-kind="subagent_run" checked />
-                <span>Subagents</span>
-              </label>
-              <label class="filter-pill">
-                <input type="checkbox" data-kind="compaction" checked />
-                <span>Compaction</span>
-              </label>
-              <label class="filter-pill">
-                <input type="checkbox" data-kind="agent_event" checked />
-                <span>Agent events</span>
-              </label>
-              <label class="filter-pill">
-                <input type="checkbox" data-kind="model_change" checked />
-                <span>Model</span>
-              </label>
-              <label class="filter-pill">
-                <input type="checkbox" data-kind="thinking_level_change" checked />
-                <span>Thinking</span>
-              </label>
-              <label class="filter-pill">
-                <input type="checkbox" data-kind="session_info" checked />
-                <span>Session info</span>
-              </label>
-            </div>
-          </details>
           <div class="content-grid">
-            <section class="timeline-wrap">
-              <div id="timeline" class="timeline"></div>
-            </section>
+            <div class="timeline-column">
+              <div class="timeline-toolbar">
+                <label class="search-wrap">
+                  <span class="search-label">Search</span>
+                  <input id="search" type="search" placeholder="Search timeline" />
+                </label>
+                <details class="filters">
+                  <summary class="filters-summary">
+                    <span class="filters-label">Filters</span>
+                  </summary>
+                  <div class="filters-panel">
+                    <label class="filter-pill">
+                      <input type="checkbox" data-kind="user_message" checked />
+                      <span>User</span>
+                    </label>
+                    <label class="filter-pill">
+                      <input type="checkbox" data-kind="assistant_message" checked />
+                      <span>Assistant</span>
+                    </label>
+                    <label class="filter-pill">
+                      <input type="checkbox" data-kind="tool" checked />
+                      <span>Tools</span>
+                    </label>
+                    <label class="filter-pill">
+                      <input type="checkbox" data-kind="subagent_run" checked />
+                      <span>Subagents</span>
+                    </label>
+                    <label class="filter-pill">
+                      <input type="checkbox" data-kind="compaction" checked />
+                      <span>Compaction</span>
+                    </label>
+                    <label class="filter-pill">
+                      <input type="checkbox" data-kind="agent_event" checked />
+                      <span>Agent events</span>
+                    </label>
+                    <label class="filter-pill">
+                      <input type="checkbox" data-kind="model_change" checked />
+                      <span>Model</span>
+                    </label>
+                    <label class="filter-pill">
+                      <input type="checkbox" data-kind="thinking_level_change" checked />
+                      <span>Thinking</span>
+                    </label>
+                    <label class="filter-pill">
+                      <input type="checkbox" data-kind="session_info" checked />
+                      <span>Session info</span>
+                    </label>
+                  </div>
+                </details>
+              </div>
+              <section class="timeline-wrap">
+                <div id="timeline" class="timeline"></div>
+              </section>
+            </div>
             <aside class="detail-panel" id="detail-panel">
               <div class="detail-header">
                 <span class="detail-label">Selection</span>

@@ -425,35 +425,46 @@ body::after {
   flex-wrap: wrap;
 }
 
-.toolbar-right {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
 .view-toggle {
   display: inline-flex;
-  gap: 8px;
+  gap: 12px;
+  perspective: 600px;
 }
 
 .view-tab {
-  padding: 6px 14px;
-  border-radius: 999px;
+  position: relative;
+  padding: 10px 16px;
+  border-radius: 14px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(24, 30, 40, 0.95), rgba(16, 20, 28, 0.95));
   color: var(--ink-soft);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.22em;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: transform 0.35s ease, box-shadow 0.35s ease, border 0.3s ease, color 0.3s ease;
+  transform-style: preserve-3d;
+  transform: rotateX(12deg);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+  appearance: none;
 }
 
 .view-tab.active {
   border-color: rgba(94, 241, 198, 0.6);
-  background: rgba(94, 241, 198, 0.14);
+  background: linear-gradient(180deg, rgba(30, 46, 48, 0.95), rgba(18, 28, 30, 0.95));
   color: #e9fff7;
+  transform: rotateX(0deg);
+  box-shadow: 0 18px 30px rgba(94, 241, 198, 0.25);
+}
+
+.view-tab::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 14px;
+  background: radial-gradient(circle at top, rgba(255, 255, 255, 0.2), transparent 70%);
+  opacity: 0.35;
+  pointer-events: none;
 }
 
 .title-stack h2 {
@@ -517,12 +528,28 @@ body::after {
   color: var(--ink-faint);
 }
 
-.filters {
-  position: relative;
-  z-index: 1;
+.timeline-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.timeline-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
   padding-bottom: 18px;
   border-bottom: 1px dashed rgba(255, 255, 255, 0.12);
   margin-bottom: 18px;
+}
+
+.filters {
+  position: relative;
+  z-index: 1;
+  margin-left: auto;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
 }
 
 .filters summary {
@@ -574,6 +601,7 @@ body::after {
   gap: 10px;
   align-items: center;
   margin-top: 14px;
+  justify-content: flex-end;
 }
 
 .filters[open] .filters-panel {
@@ -634,10 +662,18 @@ body::after {
   gap: 18px;
   flex: 1;
   min-height: 0;
+  animation: viewFlipIn 0.45s ease both;
 }
 
-.main[data-view="evolution"] .search-wrap {
-  display: none;
+@keyframes viewFlipIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) rotateX(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotateX(0deg);
+  }
 }
 
 .content-grid {
@@ -654,6 +690,7 @@ body::after {
 .timeline-wrap {
   min-height: 0;
   height: 100%;
+  flex: 1;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding-right: 8px;
@@ -692,6 +729,50 @@ body::after {
   animation: rise 0.5s ease both;
   animation-delay: calc(var(--index, 0) * 30ms);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border 0.2s ease;
+}
+
+.event-node {
+  position: relative;
+  margin-left: calc(var(--depth, 0) * 18px);
+}
+
+.event-group {
+  display: block;
+}
+
+.event-group > summary {
+  list-style: none;
+}
+
+.event-group > summary::-webkit-details-marker {
+  display: none;
+}
+
+.event-group-summary {
+  cursor: pointer;
+}
+
+.event.has-children::after {
+  content: "▸";
+  position: absolute;
+  top: 18px;
+  right: 16px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.event-group[open] .event.has-children::after {
+  content: "▾";
+}
+
+.event-children {
+  margin-top: 12px;
+  margin-left: 18px;
+  padding-left: 14px;
+  border-left: 1px dashed rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .event::before {
@@ -1400,6 +1481,20 @@ body::after {
   .toolbar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .timeline-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filters {
+    margin-left: 0;
+    align-items: flex-start;
+  }
+
+  .filters-panel {
+    justify-content: flex-start;
   }
 
   #search {
