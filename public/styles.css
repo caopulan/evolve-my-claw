@@ -427,9 +427,7 @@ body::after {
 
 .view-switch {
   position: relative;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
+  display: block;
   padding: 4px;
   border-radius: 999px;
   background: rgba(12, 16, 24, 0.85);
@@ -437,6 +435,7 @@ body::after {
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04),
     0 14px 24px rgba(0, 0, 0, 0.25);
   min-width: 220px;
+  min-height: 42px;
   overflow: hidden;
 }
 
@@ -447,9 +446,11 @@ body::after {
 }
 
 .view-option {
-  position: relative;
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 50%;
   z-index: 2;
-  padding: 10px 0;
+  padding: 0;
   border: none;
   background: transparent;
   color: transparent;
@@ -461,8 +462,8 @@ body::after {
   opacity: 0;
 }
 
-.view-option.active {
-  opacity: 0;
+.view-option[data-view="evolution"] {
+  inset: 0 0 0 auto;
 }
 
 .view-indicator {
