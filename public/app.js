@@ -600,8 +600,15 @@ function renderSessions() {
         const timeEl = document.createElement("div");
         timeEl.className = "task-time";
         timeEl.textContent = formatTaskTime(task.startTs);
+        const messageId = extractMessageId(task.userMessage || "");
+        const idEl = document.createElement("div");
+        idEl.className = "task-id";
+        idEl.textContent = messageId;
         info.appendChild(titleEl);
         info.appendChild(timeEl);
+        if (messageId) {
+          info.appendChild(idEl);
+        }
         item.appendChild(checkbox);
         item.appendChild(info);
         taskList.appendChild(item);
