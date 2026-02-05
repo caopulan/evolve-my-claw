@@ -564,9 +564,38 @@ function getSelectedEvent() {
   return state.events.find((event) => getEventKey(event) === state.selectedEventId) || null;
 }
 
+function toEventDataId(eventId) {
+  return encodeURIComponent(String(eventId));
+}
+
+function updateTimelineSelection(previousId, nextId) {
+  if (!timelineEl) {
+    return;
+  }
+  if (previousId) {
+    const prevEl = timelineEl.querySelector(`[data-event-id="${toEventDataId(previousId)}"]`);
+    if (prevEl) {
+      prevEl.classList.remove("selected");
+    }
+  }
+  if (nextId) {
+    const nextEl = timelineEl.querySelector(`[data-event-id="${toEventDataId(nextId)}"]`);
+    if (nextEl) {
+      nextEl.classList.add("selected");
+    }
+  }
+}
+
 function selectEvent(eventId) {
+  if (!eventId || state.selectedEventId === eventId) {
+    return;
+  }
+  const previousId = state.selectedEventId;
   state.selectedEventId = eventId;
-  renderTimeline();
+  if (state.mainView === "task") {
+    updateTimelineSelection(previousId, eventId);
+    renderDetailPanel();
+  }
 }
 
 function renderSessions() {
@@ -1296,6 +1325,7 @@ function renderTimeline() {
     const wrapper = document.createElement("div");
     wrapper.className = `event ${event.kind}` + (eventId === state.selectedEventId ? " selected" : "");
     wrapper.style.setProperty("--index", index);
+    wrapper.setAttribute("data-event-id", toEventDataId(eventId));
     wrapper.setAttribute("role", "button");
     wrapper.setAttribute("tabindex", "0");
     const header = document.createElement("div");
