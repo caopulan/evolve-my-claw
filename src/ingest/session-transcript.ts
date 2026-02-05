@@ -58,6 +58,28 @@ function extractText(content: unknown): string {
   return parts.join("\n");
 }
 
+function extractThinking(content: unknown): Array<{ text: string; signature?: string }> {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+  const thoughts: Array<{ text: string; signature?: string }> = [];
+  for (const item of content) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const entry = item as Record<string, unknown>;
+    if (entry.type !== "thinking") {
+      continue;
+    }
+    const text = typeof entry.thinking === "string" ? entry.thinking.trim() : "";
+    const signature = typeof entry.thinkingSignature === "string" ? entry.thinkingSignature : undefined;
+    if (text || signature) {
+      thoughts.push({ text, signature });
+    }
+  }
+  return thoughts;
+}
+
 function summarize(text: string, limit = 140): string {
   const trimmed = text.trim();
   if (trimmed.length <= limit) {
@@ -140,15 +162,24 @@ export async function parseSessionTranscript(params: {
 
       if (role === "assistant") {
         const text = extractText(content);
-        if (text) {
+        const thinkingItems = extractThinking(content);
+        const thinkingText = thinkingItems.map((item) => item.text).filter(Boolean).join("\n\n");
+        if (text || thinkingText) {
           events.push({
             id: `msg-assistant-${lineNo}`,
             ts: msgTs,
             kind: "assistant_message",
             sessionKey: params.sessionKey,
             sessionId: params.sessionId,
-            summary: summarize(text),
-            details: { text },
+            summary: text
+              ? summarize(text)
+              : thinkingText
+                ? `Thinking: ${summarize(thinkingText)}`
+                : "Assistant message",
+            details: {
+              ...(text ? { text } : {}),
+              ...(thinkingItems.length > 0 ? { thinking: thinkingItems } : {}),
+            },
           });
         }
         if (Array.isArray(content)) {
