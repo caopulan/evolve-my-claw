@@ -189,6 +189,7 @@ function renderSessions() {
     const card = document.createElement("div");
     card.style.setProperty("--index", String(index));
     card.className = "session-card" + (session.key === state.activeSessionKey ? " active" : "");
+    card.setAttribute("data-session-key", session.key);
     const title = document.createElement("div");
     title.className = "session-title";
     title.textContent = session.displayName || session.label || session.key;
@@ -199,6 +200,13 @@ function renderSessions() {
     card.appendChild(meta);
     card.addEventListener("click", () => loadTimeline(session.key));
     sessionsEl.appendChild(card);
+  });
+}
+
+function updateActiveSessionCard() {
+  document.querySelectorAll(".session-card").forEach((card) => {
+    const key = card.getAttribute("data-session-key");
+    card.classList.toggle("active", key === state.activeSessionKey);
   });
 }
 
@@ -375,11 +383,12 @@ async function loadSessions() {
   const data = await res.json();
   state.sessions = data.sessions || [];
   renderSessions();
+  updateActiveSessionCard();
 }
 
 async function loadTimeline(sessionKey) {
   state.activeSessionKey = sessionKey;
-  renderSessions();
+  updateActiveSessionCard();
   sessionTitleEl.textContent = sessionKey;
   sessionSubtitleEl.textContent = "Loading timeline...";
   const res = await fetch(`/api/timeline?sessionKey=${encodeURIComponent(sessionKey)}`);
