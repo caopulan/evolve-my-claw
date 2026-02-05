@@ -6,6 +6,7 @@ import { listSessions, type SessionIndexEntry } from "../ingest/session-store.js
 import { loadSubagentRuns } from "../ingest/subagents.js";
 import { capturedEventsToTimeline, loadCapturedAgentEvents } from "../ingest/agent-events.js";
 import { resolveOpenClawStateDir } from "../paths.js";
+import { loadConfig } from "../config.js";
 import { loadTaskRecords, type TaskRecord } from "../tasks/task-store.js";
 import { loadAnalysisRecords, type TaskAnalysisRecord } from "../tasks/analysis-store.js";
 
@@ -24,6 +25,29 @@ function extractAgentIdFromSessionKey(sessionKey: string): string | undefined {
     return parts[1];
   }
   return undefined;
+}
+
+function resolveExcludedAgentIds(stateDir: string): Set<string> {
+  const config = loadConfig({ stateDir });
+  return new Set(config.excludeAgentIds.map((id) => id.toLowerCase()));
+}
+
+function filterSessionsByAgent(
+  sessions: SessionIndexEntry[],
+  excluded: Set<string>,
+): SessionIndexEntry[] {
+  if (excluded.size === 0) {
+    return sessions;
+  }
+  return sessions.filter((session) => !excluded.has(session.agentId.toLowerCase()));
+}
+
+function isExcludedSessionKey(sessionKey: string, excluded: Set<string>): boolean {
+  const agentId = extractAgentIdFromSessionKey(sessionKey);
+  if (!agentId) {
+    return false;
+  }
+  return excluded.has(agentId.toLowerCase());
 }
 
 function resolveSessionIdFromFile(sessionFile: string, fallback?: string): string {
@@ -332,7 +356,8 @@ function buildSubagentEvent(params: {
 }
 
 export function getSessions(stateDir = resolveOpenClawStateDir()): SessionIndexEntry[] {
-  return listSessions(stateDir);
+  const excluded = resolveExcludedAgentIds(stateDir);
+  return filterSessionsByAgent(listSessions(stateDir), excluded);
 }
 
 async function loadTranscriptEvents(params: {
@@ -361,7 +386,8 @@ export async function buildTimeline(params: {
   stateDir?: string;
 }): Promise<{ session?: SessionIndexEntry; events: TimelineEvent[] }> {
   const stateDir = params.stateDir ?? resolveOpenClawStateDir();
-  const sessions = listSessions(stateDir);
+  const excluded = resolveExcludedAgentIds(stateDir);
+  const sessions = filterSessionsByAgent(listSessions(stateDir), excluded);
   const session = sessions.find((entry) => entry.key === params.sessionKey);
   if (!session) {
     return { events: [] };
@@ -405,6 +431,9 @@ export async function buildTimeline(params: {
     sessionKey: string,
     ancestry: Set<string>,
   ): Promise<TimelineEvent[]> => {
+    if (isExcludedSessionKey(sessionKey, excluded)) {
+      return [];
+    }
     if (expandedCache.has(sessionKey)) {
       return expandedCache.get(sessionKey) ?? [];
     }
@@ -432,7 +461,7 @@ export async function buildTimeline(params: {
       const spawn = extractSpawnInfo(event);
       const childKey = spawn.childSessionKey;
       let children: TimelineEvent[] = [];
-      if (childKey && !ancestry.has(childKey)) {
+      if (childKey && !ancestry.has(childKey) && !isExcludedSessionKey(childKey, excluded)) {
         const nextAncestry = new Set(ancestry);
         nextAncestry.add(childKey);
         children = await expandSessionEvents(childKey, nextAncestry);
