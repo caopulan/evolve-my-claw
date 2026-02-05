@@ -450,13 +450,20 @@ body::after {
   color: var(--ink-faint);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.26em;
+  letter-spacing: 0.22em;
   cursor: pointer;
-  transition: color 0.3s ease;
+  transition: color 0.3s ease, opacity 0.3s ease;
+  opacity: 0.6;
 }
 
 .view-option.active {
-  color: #e9fff7;
+  color: transparent;
+  opacity: 1;
+}
+
+.view-switch[data-active="task"] .view-option[data-view="evolution"],
+.view-switch[data-active="evolution"] .view-option[data-view="task"] {
+  opacity: 0.45;
 }
 
 .view-indicator {
@@ -471,6 +478,19 @@ body::after {
   transform: translateX(0) rotateX(6deg);
   transition: transform 0.35s ease, box-shadow 0.35s ease;
   pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.view-indicator-label {
+  font-family: var(--font-body);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: #e9fff7;
+  text-shadow: 0 6px 16px rgba(94, 241, 198, 0.35);
 }
 
 .view-switch[data-active="evolution"] .view-indicator {
