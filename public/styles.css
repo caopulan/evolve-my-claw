@@ -506,32 +506,6 @@ body::before {
   gap: 16px;
 }
 
-.detail-search {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  color: var(--ink-faint);
-  margin-bottom: 16px;
-}
-
-.detail-search input {
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--panel-border);
-  background: rgba(255, 255, 255, 0.7);
-  font-family: var(--font-body);
-  font-size: 13px;
-  outline: none;
-  transition: border 0.2s ease, box-shadow 0.2s ease;
-}
-
-.detail-search input:focus {
-  border-color: rgba(46, 111, 165, 0.6);
-  box-shadow: 0 0 0 4px rgba(46, 111, 165, 0.14);
-}
 
 .detail-meta {
   display: grid;

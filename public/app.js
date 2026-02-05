@@ -14,7 +14,6 @@ const state = {
   ]),
   filteredEventIds: new Set(),
   selectedEventId: null,
-  detailSearch: "",
   search: "",
 };
 
@@ -28,7 +27,6 @@ const searchEl = document.getElementById("search");
 const detailTitleEl = document.getElementById("detail-title");
 const detailSubtitleEl = document.getElementById("detail-subtitle");
 const detailBodyEl = document.getElementById("detail-body");
-const detailSearchEl = document.getElementById("detail-search");
 
 function formatTime(ts) {
   const date = new Date(ts);
@@ -58,13 +56,6 @@ function formatJsonValue(value) {
   return String(value);
 }
 
-function matchesQuery(text, query) {
-  if (!query) {
-    return true;
-  }
-  return text.toLowerCase().includes(query);
-}
-
 function getJsonType(value) {
   if (value === null) {
     return "null";
@@ -78,12 +69,7 @@ function getJsonType(value) {
   return typeof value;
 }
 
-function createJsonLeaf(key, value, query) {
-  const label = key ?? "";
-  const candidate = `${label} ${formatJsonValue(value)}`.toLowerCase();
-  if (query && !matchesQuery(candidate, query)) {
-    return null;
-  }
+function createJsonLeaf(key, value) {
   const row = document.createElement("div");
   row.className = "json-leaf";
 
@@ -108,23 +94,14 @@ function createJsonLeaf(key, value, query) {
   return row;
 }
 
-function createJsonNode(key, value, depth, query) {
+function createJsonNode(key, value, depth) {
   if (!value || typeof value !== "object") {
-    return createJsonLeaf(key, value, query);
+    return createJsonLeaf(key, value);
   }
 
   const isArray = Array.isArray(value);
   const entries = isArray ? value.map((item, index) => [String(index), item]) : Object.entries(value);
   const label = key ?? (isArray ? "Array" : "Object");
-  const directMatch = query ? matchesQuery(String(label).toLowerCase(), query) : true;
-  const childQuery = query && directMatch ? "" : query;
-  const childNodes = entries
-    .map(([childKey, childValue]) => createJsonNode(childKey, childValue, depth + 1, childQuery))
-    .filter(Boolean);
-
-  if (query && !directMatch && childNodes.length === 0) {
-    return null;
-  }
 
   const details = document.createElement("details");
   details.className = "json-node";
@@ -151,31 +128,20 @@ function createJsonNode(key, value, depth, query) {
     empty.className = "json-empty";
     empty.textContent = "(empty)";
     children.appendChild(empty);
-  } else if (childNodes.length) {
-    childNodes.forEach((node) => children.appendChild(node));
   } else {
-    const empty = document.createElement("div");
-    empty.className = "json-empty";
-    empty.textContent = "(no matches)";
-    children.appendChild(empty);
+    entries.forEach(([childKey, childValue]) => {
+      children.appendChild(createJsonNode(childKey, childValue, depth + 1));
+    });
   }
 
   details.appendChild(children);
   return details;
 }
 
-function createJsonTree(value, query) {
+function createJsonTree(value) {
   const wrapper = document.createElement("div");
   wrapper.className = "json-tree";
-  const node = createJsonNode("payload", value, 0, query);
-  if (node) {
-    wrapper.appendChild(node);
-  } else {
-    const empty = document.createElement("div");
-    empty.className = "json-empty";
-    empty.textContent = "(no matches)";
-    wrapper.appendChild(empty);
-  }
+  wrapper.appendChild(createJsonNode("payload", value, 0));
   return wrapper;
 }
 
@@ -238,12 +204,6 @@ function renderSessions() {
 function renderDetailPanel() {
   detailBodyEl.innerHTML = "";
   const event = getSelectedEvent();
-  const detailQuery = state.detailSearch.trim().toLowerCase();
-
-  if (detailSearchEl) {
-    detailSearchEl.value = state.detailSearch;
-    detailSearchEl.disabled = !event;
-  }
 
   if (!event) {
     detailTitleEl.textContent = "No event selected";
@@ -315,7 +275,7 @@ function renderDetailPanel() {
     empty.textContent = "(no details payload)";
     detailsSection.appendChild(empty);
   } else {
-    detailsSection.appendChild(createJsonTree(event.details, detailQuery));
+    detailsSection.appendChild(createJsonTree(event.details));
   }
   detailBodyEl.appendChild(detailsSection);
 }
@@ -456,14 +416,6 @@ searchEl.addEventListener("input", (event) => {
   state.search = target.value || "";
   renderTimeline();
 });
-
-if (detailSearchEl) {
-  detailSearchEl.addEventListener("input", (event) => {
-    const target = event.target;
-    state.detailSearch = target.value || "";
-    renderDetailPanel();
-  });
-}
 
 wireFilters();
 loadSessions();
