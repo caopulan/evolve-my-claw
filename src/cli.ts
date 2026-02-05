@@ -8,7 +8,7 @@ import { GatewayCaptureClient } from "./gateway/client.js";
 import { loadConfig } from "./config.js";
 import { listSessions } from "./ingest/session-store.js";
 import { parseSessionTranscript } from "./ingest/session-transcript.js";
-import { buildTaskCandidates } from "./tasks/task-parser.js";
+import { buildTaskCandidates, mergeSubagentCandidates } from "./tasks/task-parser.js";
 import { appendTaskRecords, loadTaskIndex, loadTaskRecords } from "./tasks/task-store.js";
 import { analyzeTaskCandidate } from "./tasks/task-analyzer.js";
 import { appendAnalysisRecords, loadAnalysisIndex } from "./tasks/analysis-store.js";
@@ -95,6 +95,7 @@ program
 
     const existing = await loadTaskIndex(stateDir);
     const pending = [];
+    const allCandidates = [];
 
     let sessionCount = 0;
     let candidateCount = 0;
@@ -109,14 +110,17 @@ program
       });
       const candidates = buildTaskCandidates({ session, events, config });
       candidateCount += candidates.length;
-      for (const candidate of candidates) {
-        if (existing.has(candidate.taskId)) {
-          skipped += 1;
-          continue;
-        }
-        pending.push(candidate);
-        existing.add(candidate.taskId);
+      allCandidates.push(...candidates);
+    }
+
+    const mergedCandidates = mergeSubagentCandidates(allCandidates);
+    for (const candidate of mergedCandidates) {
+      if (existing.has(candidate.taskId)) {
+        skipped += 1;
+        continue;
       }
+      pending.push(candidate);
+      existing.add(candidate.taskId);
     }
 
     const appended = opts.dryRun ? 0 : appendTaskRecords(pending, stateDir);

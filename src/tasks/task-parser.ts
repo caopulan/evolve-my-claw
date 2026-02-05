@@ -13,6 +13,8 @@ export type TaskToolCall = {
   args?: unknown;
   result?: unknown;
   isError?: boolean;
+  originSessionKey?: string;
+  originSessionId?: string;
 };
 
 export type TaskContinuation = {
@@ -31,6 +33,7 @@ export type TaskCandidateRecord = {
   sessionId: string;
   parentSessionKey?: string;
   parentTaskId?: string;
+  spawnedSessionKeys?: string[];
   agentId: string;
   userMessageId: string;
   userMessage: string;
@@ -47,6 +50,7 @@ type CandidateBuilder = {
   sessionId: string;
   parentSessionKey?: string;
   parentTaskId?: string;
+  spawnedSessionKeys: string[];
   agentId: string;
   userMessageId: string;
   userMessage: string;
@@ -185,6 +189,8 @@ function buildToolCall(event: TimelineEvent): TaskToolCall {
     args: details?.args,
     result: details?.result,
     isError: Boolean(details?.isError),
+    originSessionKey: event.sessionKey,
+    originSessionId: event.sessionId,
   };
 }
 
@@ -201,6 +207,7 @@ function finalizeCandidate(candidate: CandidateBuilder | null): TaskCandidateRec
     sessionId: candidate.sessionId,
     parentSessionKey: candidate.parentSessionKey,
     parentTaskId: candidate.parentTaskId,
+    spawnedSessionKeys: candidate.spawnedSessionKeys.length > 0 ? candidate.spawnedSessionKeys : undefined,
     agentId: candidate.agentId,
     userMessageId: candidate.userMessageId,
     userMessage: candidate.userMessage,
@@ -279,6 +286,7 @@ export function buildTaskCandidates(params: {
         sessionKey: params.session.key,
         sessionId: params.session.sessionId,
         parentSessionKey: params.session.spawnedBy ?? undefined,
+        spawnedSessionKeys: [],
         agentId: params.session.agentId,
         userMessageId: event.id,
         userMessage: userMessage,
@@ -306,6 +314,7 @@ export function buildTaskCandidates(params: {
         const childKey = extractChildSessionKeyFromToolResult(details?.result);
         if (childKey) {
           spawnBySessionKey.set(childKey, current.taskId);
+          current.spawnedSessionKeys.push(childKey);
         }
         const label = extractSpawnLabelFromArgs(args);
         if (label) {
@@ -326,4 +335,92 @@ export function buildTaskCandidates(params: {
   }
 
   return candidates;
+}
+
+function mergeToolCalls(base: TaskToolCall[], extra: TaskToolCall[]): TaskToolCall[] {
+  const merged = [...base, ...extra];
+  merged.sort((a, b) => a.startTs - b.startTs);
+  return merged;
+}
+
+function resolveParentTaskId(
+  child: TaskCandidateRecord,
+  byId: Map<string, TaskCandidateRecord>,
+  childToParent: Map<string, string>,
+): string | undefined {
+  const direct = childToParent.get(child.sessionKey);
+  if (direct) {
+    return direct;
+  }
+  if (!child.parentSessionKey) {
+    return undefined;
+  }
+  let best: TaskCandidateRecord | undefined;
+  for (const candidate of byId.values()) {
+    if (candidate.sessionKey !== child.parentSessionKey) {
+      continue;
+    }
+    if (candidate.startTs <= child.startTs) {
+      if (!best || candidate.startTs > best.startTs) {
+        best = candidate;
+      }
+    }
+  }
+  if (best) {
+    return best.taskId;
+  }
+  for (const candidate of byId.values()) {
+    if (candidate.sessionKey !== child.parentSessionKey) {
+      continue;
+    }
+    if (!best || candidate.startTs > best.startTs) {
+      best = candidate;
+    }
+  }
+  return best?.taskId;
+}
+
+export function mergeSubagentCandidates(candidates: TaskCandidateRecord[]): TaskCandidateRecord[] {
+  if (candidates.length === 0) {
+    return candidates;
+  }
+  const byId = new Map<string, TaskCandidateRecord>();
+  for (const candidate of candidates) {
+    byId.set(candidate.taskId, candidate);
+  }
+
+  const childToParent = new Map<string, string>();
+  for (const candidate of candidates) {
+    if (!candidate.spawnedSessionKeys) {
+      continue;
+    }
+    for (const childKey of candidate.spawnedSessionKeys) {
+      childToParent.set(childKey, candidate.taskId);
+    }
+  }
+
+  const removed = new Set<string>();
+  for (const candidate of candidates) {
+    const parentId = resolveParentTaskId(candidate, byId, childToParent);
+    if (!parentId || parentId === candidate.taskId) {
+      continue;
+    }
+    const parent = byId.get(parentId);
+    if (!parent) {
+      continue;
+    }
+    parent.toolCalls = mergeToolCalls(parent.toolCalls, candidate.toolCalls);
+    if (candidate.continuations && candidate.continuations.length > 0) {
+      if (!parent.continuations) {
+        parent.continuations = [];
+      }
+      parent.continuations.push(...candidate.continuations);
+    }
+    if (candidate.endTs && (!parent.endTs || candidate.endTs > parent.endTs)) {
+      parent.endTs = candidate.endTs;
+    }
+    removed.add(candidate.taskId);
+  }
+
+  return candidates.filter((candidate) => !removed.has(candidate.taskId));
 }
