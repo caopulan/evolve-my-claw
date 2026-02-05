@@ -50,6 +50,35 @@ node dist/cli.js capture
 node dist/cli.js capture --token <gateway-token>
 ```
 
+## 解析任务候选（可选）
+
+将 session 日志解析为“任务候选”，追加写入：
+
+```
+~/.openclaw/evolve-my-claw/tasks.jsonl
+```
+
+启动方式：
+
+```bash
+node dist/cli.js parse
+```
+
+可选配置（默认路径）：
+
+```
+~/.openclaw/evolve-my-claw/config.json
+```
+
+示例：
+
+```json
+{
+  "excludeAgentIds": ["evolver"],
+  "excludeTools": ["message/send", "message/thread-reply"]
+}
+```
+
 ## 常见参数
 
 - `--state-dir <dir>`：指定 OpenClaw 状态目录
@@ -60,4 +89,3 @@ node dist/cli.js capture --token <gateway-token>
 
 - 短期调试：直接在终端运行
 - 长期运行：用 `tmux`/`screen`/`nohup` 保持后台进程
-

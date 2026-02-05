@@ -34,6 +34,33 @@ You can override the gateway URL or auth:
 node dist/cli.js capture --url ws://127.0.0.1:18789 --token <token>
 ```
 
+## Parse task candidates (optional)
+
+```bash
+node dist/cli.js parse
+```
+
+This appends candidate tasks to:
+
+```
+~/.openclaw/evolve-my-claw/tasks.jsonl
+```
+
+By default it skips sessions from analyzer agents and filters outbound message sends. You can override defaults with a config file at:
+
+```
+~/.openclaw/evolve-my-claw/config.json
+```
+
+Example:
+
+```json
+{
+  "excludeAgentIds": ["evolver"],
+  "excludeTools": ["message/send", "message/thread-reply"]
+}
+```
+
 ## Notes
 
 - Tool start/update events are not globally broadcast by the gateway. The UI relies on session transcripts for tool timing.
@@ -43,6 +70,7 @@ node dist/cli.js capture --url ws://127.0.0.1:18789 --token <token>
 
 - `emc serve`: start the local UI server
 - `emc capture`: capture gateway agent events to JSONL
+- `emc parse`: build task candidates and append to tasks.jsonl
 
 ## Agent install note
 
