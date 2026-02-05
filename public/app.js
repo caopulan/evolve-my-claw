@@ -185,8 +185,9 @@ function renderSessions() {
     return;
   }
 
-  state.sessions.forEach((session) => {
+  state.sessions.forEach((session, index) => {
     const card = document.createElement("div");
+    card.style.setProperty("--index", String(index));
     card.className = "session-card" + (session.key === state.activeSessionKey ? " active" : "");
     const title = document.createElement("div");
     title.className = "session-title";

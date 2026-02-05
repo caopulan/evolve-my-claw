@@ -171,6 +171,8 @@ body::after {
   cursor: pointer;
   border: 1px solid rgba(255, 255, 255, 0.12);
   transition: transform 0.2s ease, border 0.2s ease, box-shadow 0.2s ease;
+  animation: cardIn 0.45s ease both;
+  animation-delay: calc(var(--index, 0) * 35ms);
 }
 
 .session-card::before {
@@ -201,8 +203,10 @@ body::after {
 .session-title {
   position: relative;
   z-index: 1;
+  font-family: var(--font-display);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
+  letter-spacing: 0.02em;
 }
 
 .session-meta {
@@ -763,6 +767,17 @@ body::after {
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes cardIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
