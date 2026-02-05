@@ -29,10 +29,7 @@ export async function startServer(params: {
   await app.register(fastifyStatic, {
     root: publicDir,
     wildcard: false,
-  });
-
-  app.get("/", async (_req, reply) => {
-    return reply.sendFile("index.html");
+    index: "index.html",
   });
 
   await app.listen({ host: params.host, port: params.port });
