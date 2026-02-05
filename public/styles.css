@@ -550,6 +550,13 @@ body::after {
   transition: border 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 
+.filters-summary:hover,
+.filters-summary:focus-visible {
+  border-color: rgba(94, 241, 198, 0.45);
+  box-shadow: 0 10px 20px rgba(94, 241, 198, 0.2);
+  color: #e9fff7;
+}
+
 .filters[open] .filters-summary {
   border-color: rgba(94, 241, 198, 0.5);
   background: rgba(18, 28, 30, 0.9);
@@ -559,13 +566,6 @@ body::after {
 
 .filters-label {
   color: inherit;
-}
-
-.filters-hint {
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: none;
-  color: var(--ink-faint);
 }
 
 .filters-panel {
