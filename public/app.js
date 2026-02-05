@@ -40,6 +40,110 @@ function createEmptyState(message) {
   return empty;
 }
 
+function formatJsonValue(value) {
+  if (typeof value === "string") {
+    return `"${value}"`;
+  }
+  if (value === null) {
+    return "null";
+  }
+  if (typeof value === "undefined") {
+    return "undefined";
+  }
+  if (Number.isNaN(value)) {
+    return "NaN";
+  }
+  return String(value);
+}
+
+function getJsonType(value) {
+  if (value === null) {
+    return "null";
+  }
+  if (typeof value === "undefined") {
+    return "undefined";
+  }
+  if (Array.isArray(value)) {
+    return "array";
+  }
+  return typeof value;
+}
+
+function createJsonLeaf(key, value) {
+  const row = document.createElement("div");
+  row.className = "json-leaf";
+
+  if (key !== null && typeof key !== "undefined") {
+    const keySpan = document.createElement("span");
+    keySpan.className = "json-key";
+    keySpan.textContent = String(key);
+    row.appendChild(keySpan);
+
+    const colon = document.createElement("span");
+    colon.className = "json-colon";
+    colon.textContent = ":";
+    row.appendChild(colon);
+  }
+
+  const type = getJsonType(value);
+  const valueSpan = document.createElement("span");
+  valueSpan.className = `json-value json-${type}`;
+  valueSpan.textContent = formatJsonValue(value);
+  row.appendChild(valueSpan);
+
+  return row;
+}
+
+function createJsonNode(key, value, depth) {
+  if (!value || typeof value !== "object") {
+    return createJsonLeaf(key, value);
+  }
+
+  const isArray = Array.isArray(value);
+  const entries = isArray ? value.map((item, index) => [String(index), item]) : Object.entries(value);
+  const details = document.createElement("details");
+  details.className = "json-node";
+  details.open = depth < 1;
+
+  const summary = document.createElement("summary");
+  const label = key ?? (isArray ? "Array" : "Object");
+  const labelSpan = document.createElement("span");
+  labelSpan.className = "json-key";
+  labelSpan.textContent = String(label);
+  summary.appendChild(labelSpan);
+
+  const meta = document.createElement("span");
+  meta.className = "json-meta";
+  meta.textContent = isArray ? `[${entries.length}]` : `{${entries.length}}`;
+  summary.appendChild(meta);
+
+  details.appendChild(summary);
+
+  const children = document.createElement("div");
+  children.className = "json-children";
+
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.className = "json-empty";
+    empty.textContent = "(empty)";
+    children.appendChild(empty);
+  } else {
+    entries.forEach(([childKey, childValue]) => {
+      children.appendChild(createJsonNode(childKey, childValue, depth + 1));
+    });
+  }
+
+  details.appendChild(children);
+  return details;
+}
+
+function createJsonTree(value) {
+  const wrapper = document.createElement("div");
+  wrapper.className = "json-tree";
+  wrapper.appendChild(createJsonNode("payload", value, 0));
+  return wrapper;
+}
+
 function normalizeEvents(events) {
   return (events || []).map((event, index) => {
     if (event.__key) {
@@ -163,10 +267,15 @@ function renderDetailPanel() {
   const detailsTitle = document.createElement("div");
   detailsTitle.className = "detail-section-title";
   detailsTitle.textContent = "Details JSON";
-  const pre = document.createElement("pre");
-  pre.textContent = event.details ? JSON.stringify(event.details, null, 2) : "(no details payload)";
   detailsSection.appendChild(detailsTitle);
-  detailsSection.appendChild(pre);
+  if (typeof event.details === "undefined") {
+    const empty = document.createElement("div");
+    empty.className = "json-empty";
+    empty.textContent = "(no details payload)";
+    detailsSection.appendChild(empty);
+  } else {
+    detailsSection.appendChild(createJsonTree(event.details));
+  }
   detailBodyEl.appendChild(detailsSection);
 }
 

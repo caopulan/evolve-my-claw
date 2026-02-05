@@ -350,7 +350,7 @@ body::before {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+  grid-template-columns: minmax(0, 4fr) minmax(320px, 6fr);
   gap: 24px;
   align-items: start;
 }
@@ -546,6 +546,107 @@ body::before {
   background: rgba(23, 23, 23, 0.04);
   border-radius: 14px;
   padding: 12px 14px;
+}
+
+.json-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.json-node {
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.6);
+  padding: 6px 8px;
+}
+
+.json-node > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink);
+  list-style: none;
+}
+
+.json-node > summary::-webkit-details-marker {
+  display: none;
+}
+
+.json-node > summary::before {
+  content: "▸";
+  font-size: 10px;
+  color: var(--ink-faint);
+  transition: transform 0.2s ease;
+}
+
+.json-node[open] > summary::before {
+  content: "▾";
+}
+
+.json-children {
+  padding-left: 16px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.json-leaf {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 4px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.json-key {
+  color: #8f5a1f;
+  font-weight: 600;
+}
+
+.json-colon {
+  color: var(--ink-faint);
+}
+
+.json-meta {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+
+.json-value {
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.json-string {
+  color: #1d5c8c;
+}
+
+.json-number {
+  color: #9b4c2f;
+}
+
+.json-boolean {
+  color: #2f7c5e;
+}
+
+.json-null,
+.json-undefined {
+  color: #a44f75;
+}
+
+.json-empty {
+  font-size: 12px;
+  color: var(--ink-faint);
+  padding: 4px 6px;
 }
 
 .detail-section pre {
