@@ -57,6 +57,21 @@ function formatTaskTime(ts) {
   return date.toLocaleString();
 }
 
+function formatDurationMs(durationMs) {
+  if (typeof durationMs !== "number" || Number.isNaN(durationMs)) {
+    return "";
+  }
+  if (durationMs < 1000) {
+    return `${Math.round(durationMs)}ms`;
+  }
+  if (durationMs < 60000) {
+    return `${(durationMs / 1000).toFixed(2)}s`;
+  }
+  const minutes = Math.floor(durationMs / 60000);
+  const seconds = ((durationMs % 60000) / 1000).toFixed(1);
+  return `${minutes}m ${seconds}s`;
+}
+
 function createEmptyState(message) {
   const empty = document.createElement("div");
   empty.className = "empty-state";
@@ -248,6 +263,58 @@ function getTaskRange(task) {
     return null;
   }
   return { start, end: end ?? start };
+}
+
+function getActiveTask() {
+  if (state.focusedTaskId) {
+    const focused = state.tasksById.get(state.focusedTaskId);
+    if (focused) {
+      return focused;
+    }
+  }
+  if (state.activeTaskId) {
+    return state.tasksById.get(state.activeTaskId) || null;
+  }
+  return null;
+}
+
+function getToolCallRange(calls) {
+  let start = null;
+  let end = null;
+  for (const call of calls) {
+    const callStart = typeof call.startTs === "number" ? call.startTs : null;
+    const callEnd = typeof call.endTs === "number" ? call.endTs : callStart;
+    if (callStart == null) {
+      continue;
+    }
+    start = start == null ? callStart : Math.min(start, callStart);
+    if (callEnd != null) {
+      end = end == null ? callEnd : Math.max(end, callEnd);
+    }
+  }
+  if (start == null) {
+    return null;
+  }
+  return { start, end: end ?? start };
+}
+
+function groupToolCallsBySession(task) {
+  const groups = new Map();
+  const fallback = task.sessionKey;
+  (task.toolCalls || []).forEach((call) => {
+    const key = call.originSessionKey || fallback || "unknown";
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(call);
+  });
+  return [...groups.entries()].sort((a, b) => {
+    const rangeA = getToolCallRange(a[1]);
+    const rangeB = getToolCallRange(b[1]);
+    const startA = rangeA?.start ?? 0;
+    const startB = rangeB?.start ?? 0;
+    return startA - startB;
+  });
 }
 
 function getSelectedTasks() {
@@ -662,28 +729,292 @@ function toggleSessionExpanded(sessionKey) {
   setSessionExpanded(sessionKey, !expanded);
 }
 
-function renderDetailPanel() {
-  if (state.mainView !== "task") {
-    return;
-  }
-  detailBodyEl.innerHTML = "";
-  const event = getSelectedEvent();
+function buildSummaryList(rows) {
+  const list = document.createElement("div");
+  list.className = "summary-list";
+  rows.forEach((row) => {
+    const value = row.value ?? "";
+    if (value === "") {
+      return;
+    }
+    const item = document.createElement("div");
+    item.className = "summary-row";
+    const label = document.createElement("span");
+    label.className = "summary-label";
+    label.textContent = row.label;
+    const detail = document.createElement("span");
+    detail.className = "summary-value";
+    detail.textContent = String(value);
+    item.appendChild(label);
+    item.appendChild(detail);
+    list.appendChild(item);
+  });
+  return list;
+}
 
-  if (!event) {
-    detailTitleEl.textContent = "Event Detail";
-    detailSubtitleEl.textContent = "";
-    detailBodyEl.appendChild(createEmptyState("Select an event in the timeline to view details."));
-    return;
+function renderPayloadSection(title, value) {
+  const section = document.createElement("div");
+  section.className = "task-call-section";
+  const label = document.createElement("div");
+  label.className = "task-call-section-title";
+  label.textContent = title;
+  section.appendChild(label);
+  if (typeof value === "undefined") {
+    const empty = document.createElement("div");
+    empty.className = "json-empty";
+    empty.textContent = "(no payload)";
+    section.appendChild(empty);
+    return section;
+  }
+  section.appendChild(createJsonTree(value));
+  return section;
+}
+
+function renderToolCall(call) {
+  const details = document.createElement("details");
+  details.className = "task-call";
+  if (call.isError) {
+    details.classList.add("error");
   }
 
-  setMarkdown(detailTitleEl, event.summary || "(no summary)");
-  detailSubtitleEl.textContent = `${event.kind.replace(/_/g, " ")} · ${formatTime(event.ts)}`;
+  const summary = document.createElement("summary");
+  const title = document.createElement("span");
+  title.className = "task-call-title";
+  const shortSummary = call.summary ? truncateText(call.summary, 60) : "";
+  title.textContent = shortSummary ? `${call.toolName} · ${shortSummary}` : call.toolName;
+  summary.appendChild(title);
+
+  const meta = document.createElement("span");
+  meta.className = "task-call-meta";
+  const durationMs =
+    typeof call.durationMs === "number"
+      ? call.durationMs
+      : typeof call.endTs === "number"
+        ? call.endTs - call.startTs
+        : null;
+  const durationLabel = formatDurationMs(durationMs);
+  const startLabel = typeof call.startTs === "number" ? formatTime(call.startTs) : "";
+  meta.textContent = durationLabel ? `${startLabel} · ${durationLabel}` : startLabel;
+  summary.appendChild(meta);
+  details.appendChild(summary);
+
+  const body = document.createElement("div");
+  body.className = "task-call-body";
+
+  if (call.summary) {
+    const summaryBlock = document.createElement("div");
+    summaryBlock.className = "task-call-summary";
+    setMarkdown(summaryBlock, call.summary, guessMarkdownMode(call.summary));
+    body.appendChild(summaryBlock);
+  }
+
+  const metaRows = [];
+  if (call.toolCallId) {
+    metaRows.push({ label: "Call ID", value: call.toolCallId });
+  }
+  if (typeof call.startTs === "number") {
+    metaRows.push({ label: "Started", value: formatTime(call.startTs) });
+  }
+  if (typeof call.endTs === "number") {
+    metaRows.push({ label: "Ended", value: formatTime(call.endTs) });
+  }
+  if (durationLabel) {
+    metaRows.push({ label: "Duration", value: durationLabel });
+  }
+  if (call.isError) {
+    metaRows.push({ label: "Status", value: "error" });
+  }
+  if (metaRows.length) {
+    body.appendChild(buildSummaryList(metaRows));
+  }
+
+  if (typeof call.args !== "undefined") {
+    body.appendChild(renderPayloadSection("Args", call.args));
+  }
+  if (typeof call.result !== "undefined") {
+    body.appendChild(renderPayloadSection("Result", call.result));
+  }
+
+  details.appendChild(body);
+  return details;
+}
+
+function renderTextSection(title, text) {
+  const section = document.createElement("div");
+  section.className = "detail-section";
+  const header = document.createElement("div");
+  header.className = "detail-section-title";
+  header.textContent = title;
+  section.appendChild(header);
+  if (!text) {
+    const empty = document.createElement("div");
+    empty.className = "json-empty";
+    empty.textContent = "(empty)";
+    section.appendChild(empty);
+    return section;
+  }
+  const body = document.createElement("div");
+  body.className = "task-message";
+  setMarkdown(body, text, guessMarkdownMode(text));
+  section.appendChild(body);
+  return section;
+}
+
+function renderTaskDetail(task) {
+  const fragment = document.createDocumentFragment();
+  const range = getTaskRange(task);
+  const durationMs = range ? range.end - range.start : null;
+  const overview = document.createElement("div");
+  overview.className = "detail-section";
+  const overviewTitle = document.createElement("div");
+  overviewTitle.className = "detail-section-title";
+  overviewTitle.textContent = "Task Overview";
+  overview.appendChild(overviewTitle);
+
+  const meta = document.createElement("dl");
+  meta.className = "detail-meta";
+  const metaItems = [
+    { label: "Task ID", value: task.taskId },
+    { label: "Session", value: task.sessionKey },
+    { label: "Agent", value: task.agentId },
+    { label: "Start", value: formatTaskTime(task.startTs) },
+  ];
+  if (range?.end) {
+    metaItems.push({ label: "End", value: formatTaskTime(range.end) });
+  }
+  const durationLabel = formatDurationMs(durationMs);
+  if (durationLabel) {
+    metaItems.push({ label: "Duration", value: durationLabel });
+  }
+  metaItems.push({ label: "Tool calls", value: String(task.toolCalls?.length ?? 0) });
+  if (task.spawnedSessionKeys?.length) {
+    metaItems.push({ label: "Subagent sessions", value: task.spawnedSessionKeys.join(", ") });
+  }
+  if (task.continuations?.length) {
+    metaItems.push({ label: "Continuations", value: String(task.continuations.length) });
+  }
+  metaItems.forEach((item) => {
+    const wrapper = document.createElement("div");
+    const dt = document.createElement("dt");
+    dt.textContent = item.label;
+    const dd = document.createElement("dd");
+    dd.textContent = String(item.value);
+    wrapper.appendChild(dt);
+    wrapper.appendChild(dd);
+    meta.appendChild(wrapper);
+  });
+  overview.appendChild(meta);
+  fragment.appendChild(overview);
+
+  if (task.userMessage) {
+    fragment.appendChild(renderTextSection("User Message", task.userMessage));
+  }
+  if (task.assistantReply?.text) {
+    fragment.appendChild(renderTextSection("Assistant Reply", task.assistantReply.text));
+  }
+
+  if (Array.isArray(task.continuations) && task.continuations.length > 0) {
+    const contSection = document.createElement("div");
+    contSection.className = "detail-section";
+    const contTitle = document.createElement("div");
+    contTitle.className = "detail-section-title";
+    contTitle.textContent = "Continuations";
+    contSection.appendChild(contTitle);
+    const list = document.createElement("div");
+    list.className = "continuation-list";
+    task.continuations.forEach((continuation) => {
+      const row = document.createElement("div");
+      row.className = "continuation-row";
+      const kind = document.createElement("span");
+      kind.className = "continuation-kind";
+      kind.textContent = continuation.kind.replace(/_/g, " ");
+      const time = document.createElement("span");
+      time.className = "continuation-meta";
+      time.textContent = formatTaskTime(continuation.ts);
+      const text = document.createElement("span");
+      text.className = "continuation-text";
+      text.textContent = continuation.text;
+      row.appendChild(kind);
+      row.appendChild(time);
+      row.appendChild(text);
+      list.appendChild(row);
+    });
+    contSection.appendChild(list);
+    fragment.appendChild(contSection);
+  }
+
+  const toolSection = document.createElement("div");
+  toolSection.className = "detail-section";
+  const toolTitle = document.createElement("div");
+  toolTitle.className = "detail-section-title";
+  toolTitle.textContent = "Tool Calls";
+  toolSection.appendChild(toolTitle);
+  if (!Array.isArray(task.toolCalls) || task.toolCalls.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "json-empty";
+    empty.textContent = "(no tool calls)";
+    toolSection.appendChild(empty);
+  } else {
+    const groupList = document.createElement("div");
+    groupList.className = "task-group-list";
+    const groups = groupToolCallsBySession(task);
+    groups.forEach(([sessionKey, calls]) => {
+      calls.sort((a, b) => a.startTs - b.startTs);
+      const group = document.createElement("details");
+      group.className = "task-group";
+      if (sessionKey === task.sessionKey) {
+        group.open = true;
+      }
+      const summary = document.createElement("summary");
+      const label = document.createElement("span");
+      label.className = "task-group-label";
+      label.textContent = sessionKey === task.sessionKey ? "Main session" : "Subagent session";
+      summary.appendChild(label);
+      const key = document.createElement("span");
+      key.className = "task-group-key";
+      key.textContent = sessionKey;
+      summary.appendChild(key);
+      const meta = document.createElement("span");
+      meta.className = "task-group-meta";
+      meta.textContent = `${calls.length} call${calls.length === 1 ? "" : "s"}`;
+      summary.appendChild(meta);
+      group.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "task-group-body";
+      calls.forEach((call) => {
+        body.appendChild(renderToolCall(call));
+      });
+      group.appendChild(body);
+      groupList.appendChild(group);
+    });
+    toolSection.appendChild(groupList);
+  }
+  fragment.appendChild(toolSection);
+  return fragment;
+}
+
+function renderEventDetail(event, options = {}) {
+  const section = document.createElement("div");
+  section.className = "detail-section";
+  const title = document.createElement("div");
+  title.className = "detail-section-title";
+  title.textContent = "Event Detail";
+  section.appendChild(title);
 
   if (!state.filteredEventIds.has(getEventKey(event))) {
     const note = document.createElement("div");
     note.className = "detail-note";
     note.textContent = "Selected event is hidden by current filters.";
-    detailBodyEl.appendChild(note);
+    section.appendChild(note);
+  }
+
+  const showSummary = options.showSummary !== false;
+  if (showSummary && event.summary) {
+    const summary = document.createElement("div");
+    summary.className = "event-detail-summary";
+    setMarkdown(summary, event.summary, guessMarkdownMode(event.summary));
+    section.appendChild(summary);
   }
 
   const meta = document.createElement("dl");
@@ -707,23 +1038,48 @@ function renderDetailPanel() {
     wrapper.appendChild(dd);
     meta.appendChild(wrapper);
   });
-  detailBodyEl.appendChild(meta);
+  section.appendChild(meta);
 
-  const detailsSection = document.createElement("div");
-  detailsSection.className = "detail-section";
   const detailsTitle = document.createElement("div");
   detailsTitle.className = "detail-section-title";
   detailsTitle.textContent = "Details JSON (click value to toggle markdown)";
-  detailsSection.appendChild(detailsTitle);
+  section.appendChild(detailsTitle);
   if (typeof event.details === "undefined") {
     const empty = document.createElement("div");
     empty.className = "json-empty";
     empty.textContent = "(no details payload)";
-    detailsSection.appendChild(empty);
+    section.appendChild(empty);
   } else {
-    detailsSection.appendChild(createJsonTree(event.details));
+    section.appendChild(createJsonTree(event.details));
   }
-  detailBodyEl.appendChild(detailsSection);
+  return section;
+}
+
+function renderDetailPanel() {
+  if (state.mainView !== "task") {
+    return;
+  }
+  detailBodyEl.innerHTML = "";
+  const activeTask = getActiveTask();
+  const event = getSelectedEvent();
+
+  if (activeTask) {
+    detailTitleEl.textContent = taskDisplayTitle(activeTask, 90) || "Task Detail";
+    detailSubtitleEl.textContent = `${formatTaskTime(activeTask.startTs)} · ${activeTask.sessionKey}`;
+    detailBodyEl.appendChild(renderTaskDetail(activeTask));
+  } else if (event) {
+    setMarkdown(detailTitleEl, event.summary || "(no summary)");
+    detailSubtitleEl.textContent = `${event.kind.replace(/_/g, " ")} · ${formatTime(event.ts)}`;
+  } else {
+    detailTitleEl.textContent = "Event Detail";
+    detailSubtitleEl.textContent = "";
+  }
+
+  if (event) {
+    detailBodyEl.appendChild(renderEventDetail(event, { showSummary: Boolean(activeTask) }));
+  } else if (!activeTask) {
+    detailBodyEl.appendChild(createEmptyState("Select an event in the timeline to view details."));
+  }
 }
 
 function renderEvolutionView() {
