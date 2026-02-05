@@ -74,7 +74,7 @@ function truncateText(text, max = 80) {
 function stripLeadingTimestamp(text) {
   return text
     .replace(
-      /^\\s*\\[?\\(?\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}(?:[ T]\\d{1,2}:\\d{2}(?::\\d{2})?)?\\)?\\]?\\s*[-–:｜|]\\s*/i,
+      /^\s*\[?\(?\d{4}(?:-|\/)\d{1,2}(?:-|\/)\d{1,2}(?:(?:\s|T)\d{1,2}:\d{2}(?::\d{2})?)?\)?\]?\s*(?:-|:|\|)\s*/i,
       "",
     )
     .trim();
