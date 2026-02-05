@@ -506,6 +506,33 @@ body::before {
   gap: 16px;
 }
 
+.detail-search {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--ink-faint);
+  margin-bottom: 16px;
+}
+
+.detail-search input {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.7);
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+  transition: border 0.2s ease, box-shadow 0.2s ease;
+}
+
+.detail-search input:focus {
+  border-color: rgba(46, 111, 165, 0.6);
+  box-shadow: 0 0 0 4px rgba(46, 111, 165, 0.14);
+}
+
 .detail-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -543,7 +570,7 @@ body::before {
 }
 
 .detail-section {
-  background: rgba(23, 23, 23, 0.04);
+  background: rgba(21, 24, 28, 0.04);
   border-radius: 14px;
   padding: 12px 14px;
 }
@@ -556,8 +583,9 @@ body::before {
 
 .json-node {
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.8);
   padding: 6px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .json-node > summary {
@@ -567,7 +595,7 @@ body::before {
   gap: 8px;
   font-family: var(--font-mono);
   font-size: 12px;
-  color: var(--ink);
+  color: #2b2520;
   list-style: none;
 }
 
@@ -578,7 +606,7 @@ body::before {
 .json-node > summary::before {
   content: "▸";
   font-size: 10px;
-  color: var(--ink-faint);
+  color: #9b948a;
   transition: transform 0.2s ease;
 }
 
@@ -602,16 +630,17 @@ body::before {
   font-size: 12px;
   padding: 4px 6px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .json-key {
-  color: #8f5a1f;
+  color: #5c3a12;
   font-weight: 600;
 }
 
 .json-colon {
-  color: var(--ink-faint);
+  color: #9a9387;
 }
 
 .json-meta {
@@ -621,26 +650,26 @@ body::before {
 }
 
 .json-value {
-  color: var(--ink);
+  color: #1f1c18;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .json-string {
-  color: #1d5c8c;
+  color: #215b78;
 }
 
 .json-number {
-  color: #9b4c2f;
+  color: #8a4a2a;
 }
 
 .json-boolean {
-  color: #2f7c5e;
+  color: #2f6d58;
 }
 
 .json-null,
 .json-undefined {
-  color: #a44f75;
+  color: #8b5b73;
 }
 
 .json-empty {

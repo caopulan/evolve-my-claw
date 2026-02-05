@@ -14,6 +14,7 @@ const state = {
   ]),
   filteredEventIds: new Set(),
   selectedEventId: null,
+  detailSearch: "",
   search: "",
 };
 
@@ -27,6 +28,7 @@ const searchEl = document.getElementById("search");
 const detailTitleEl = document.getElementById("detail-title");
 const detailSubtitleEl = document.getElementById("detail-subtitle");
 const detailBodyEl = document.getElementById("detail-body");
+const detailSearchEl = document.getElementById("detail-search");
 
 function formatTime(ts) {
   const date = new Date(ts);
@@ -56,6 +58,13 @@ function formatJsonValue(value) {
   return String(value);
 }
 
+function matchesQuery(text, query) {
+  if (!query) {
+    return true;
+  }
+  return text.toLowerCase().includes(query);
+}
+
 function getJsonType(value) {
   if (value === null) {
     return "null";
@@ -69,7 +78,12 @@ function getJsonType(value) {
   return typeof value;
 }
 
-function createJsonLeaf(key, value) {
+function createJsonLeaf(key, value, query) {
+  const label = key ?? "";
+  const candidate = `${label} ${formatJsonValue(value)}`.toLowerCase();
+  if (query && !matchesQuery(candidate, query)) {
+    return null;
+  }
   const row = document.createElement("div");
   row.className = "json-leaf";
 
@@ -94,19 +108,29 @@ function createJsonLeaf(key, value) {
   return row;
 }
 
-function createJsonNode(key, value, depth) {
+function createJsonNode(key, value, depth, query) {
   if (!value || typeof value !== "object") {
-    return createJsonLeaf(key, value);
+    return createJsonLeaf(key, value, query);
   }
 
   const isArray = Array.isArray(value);
   const entries = isArray ? value.map((item, index) => [String(index), item]) : Object.entries(value);
+  const label = key ?? (isArray ? "Array" : "Object");
+  const directMatch = query ? matchesQuery(String(label).toLowerCase(), query) : true;
+  const childQuery = query && directMatch ? "" : query;
+  const childNodes = entries
+    .map(([childKey, childValue]) => createJsonNode(childKey, childValue, depth + 1, childQuery))
+    .filter(Boolean);
+
+  if (query && !directMatch && childNodes.length === 0) {
+    return null;
+  }
+
   const details = document.createElement("details");
   details.className = "json-node";
-  details.open = depth < 1;
+  details.open = true;
 
   const summary = document.createElement("summary");
-  const label = key ?? (isArray ? "Array" : "Object");
   const labelSpan = document.createElement("span");
   labelSpan.className = "json-key";
   labelSpan.textContent = String(label);
@@ -127,20 +151,31 @@ function createJsonNode(key, value, depth) {
     empty.className = "json-empty";
     empty.textContent = "(empty)";
     children.appendChild(empty);
+  } else if (childNodes.length) {
+    childNodes.forEach((node) => children.appendChild(node));
   } else {
-    entries.forEach(([childKey, childValue]) => {
-      children.appendChild(createJsonNode(childKey, childValue, depth + 1));
-    });
+    const empty = document.createElement("div");
+    empty.className = "json-empty";
+    empty.textContent = "(no matches)";
+    children.appendChild(empty);
   }
 
   details.appendChild(children);
   return details;
 }
 
-function createJsonTree(value) {
+function createJsonTree(value, query) {
   const wrapper = document.createElement("div");
   wrapper.className = "json-tree";
-  wrapper.appendChild(createJsonNode("payload", value, 0));
+  const node = createJsonNode("payload", value, 0, query);
+  if (node) {
+    wrapper.appendChild(node);
+  } else {
+    const empty = document.createElement("div");
+    empty.className = "json-empty";
+    empty.textContent = "(no matches)";
+    wrapper.appendChild(empty);
+  }
   return wrapper;
 }
 
@@ -203,6 +238,12 @@ function renderSessions() {
 function renderDetailPanel() {
   detailBodyEl.innerHTML = "";
   const event = getSelectedEvent();
+  const detailQuery = state.detailSearch.trim().toLowerCase();
+
+  if (detailSearchEl) {
+    detailSearchEl.value = state.detailSearch;
+    detailSearchEl.disabled = !event;
+  }
 
   if (!event) {
     detailTitleEl.textContent = "No event selected";
@@ -274,7 +315,7 @@ function renderDetailPanel() {
     empty.textContent = "(no details payload)";
     detailsSection.appendChild(empty);
   } else {
-    detailsSection.appendChild(createJsonTree(event.details));
+    detailsSection.appendChild(createJsonTree(event.details, detailQuery));
   }
   detailBodyEl.appendChild(detailsSection);
 }
@@ -415,6 +456,14 @@ searchEl.addEventListener("input", (event) => {
   state.search = target.value || "";
   renderTimeline();
 });
+
+if (detailSearchEl) {
+  detailSearchEl.addEventListener("input", (event) => {
+    const target = event.target;
+    state.detailSearch = target.value || "";
+    renderDetailPanel();
+  });
+}
 
 wireFilters();
 loadSessions();
