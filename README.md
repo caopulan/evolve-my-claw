@@ -43,3 +43,7 @@ node dist/cli.js capture --url ws://127.0.0.1:18789 --token <token>
 
 - `emc serve`: start the local UI server
 - `emc capture`: capture gateway agent events to JSONL
+
+## Agent install note
+
+Agent-facing install/start instructions live in `docs/agent-install.md`.
