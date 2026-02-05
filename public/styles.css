@@ -339,6 +339,12 @@ body::after {
   border-color: rgba(94, 241, 198, 0.3);
 }
 
+.task-item.focused {
+  border-color: rgba(94, 241, 198, 0.7);
+  background: rgba(94, 241, 198, 0.12);
+  box-shadow: 0 12px 26px rgba(94, 241, 198, 0.18);
+}
+
 .task-item input {
   margin-top: 2px;
   accent-color: #5ef1c6;

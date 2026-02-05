@@ -244,6 +244,7 @@ function focusTask(task) {
   }
   state.activeTaskId = task.taskId;
   state.focusedTaskId = task.taskId;
+  updateActiveSessionCard();
   if (task.sessionKey && task.sessionKey !== state.activeSessionKey) {
     loadTimeline(task.sessionKey);
   } else {
@@ -477,6 +478,7 @@ function renderSessions() {
     card.appendChild(textWrap);
     card.addEventListener("click", () => {
       state.focusedTaskId = null;
+      updateActiveSessionCard();
       loadTimeline(session.key);
     });
 
@@ -497,7 +499,7 @@ function renderSessions() {
     } else {
       tasksForSession.forEach((task) => {
         const item = document.createElement("div");
-        item.className = "task-item";
+        item.className = "task-item" + (state.focusedTaskId === task.taskId ? " focused" : "");
         item.setAttribute("role", "button");
         item.setAttribute("tabindex", "0");
         item.addEventListener("click", () => {
@@ -534,6 +536,7 @@ function renderSessions() {
             }
           }
           persistSelectedTaskIds();
+          updateActiveSessionCard();
           renderDetailPanel();
           renderEvolutionView();
         });
@@ -563,7 +566,8 @@ function renderSessions() {
 function updateActiveSessionCard() {
   document.querySelectorAll(".session-card").forEach((card) => {
     const key = card.getAttribute("data-session-key");
-    card.classList.toggle("active", key === state.activeSessionKey);
+    const isActive = key === state.activeSessionKey && !state.focusedTaskId;
+    card.classList.toggle("active", isActive);
   });
 }
 
