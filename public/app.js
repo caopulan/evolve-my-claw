@@ -8,6 +8,7 @@ const state = {
   expandedSessions: new Set(),
   selectedTaskIds: new Set(),
   activeTaskId: null,
+  focusedTaskId: null,
   detailTab: "task",
   analysesByTask: new Map(),
   analysesLoaded: false,
@@ -65,6 +66,37 @@ function truncateText(text, max = 80) {
   return `${trimmed.slice(0, max)}…`;
 }
 
+function stripLeadingTimestamp(text) {
+  return text
+    .replace(
+      /^\\s*\\[?\\(?\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}(?:[ T]\\d{1,2}:\\d{2}(?::\\d{2})?)?\\)?\\]?\\s*[-–:｜|]\\s*/i,
+      "",
+    )
+    .trim();
+}
+
+function taskDisplayTitle(task, max = 80) {
+  const base = task.userMessage || task.taskId || "";
+  return truncateText(stripLeadingTimestamp(base), max);
+}
+
+function getTaskRange(task) {
+  const start = typeof task.startTs === "number" ? task.startTs : null;
+  let end = typeof task.endTs === "number" ? task.endTs : null;
+  if (end == null && Array.isArray(task.toolCalls)) {
+    for (const call of task.toolCalls) {
+      const candidate = typeof call.endTs === "number" ? call.endTs : call.startTs;
+      if (typeof candidate === "number") {
+        end = end == null ? candidate : Math.max(end, candidate);
+      }
+    }
+  }
+  if (start == null) {
+    return null;
+  }
+  return { start, end: end ?? start };
+}
+
 function getSelectedTasks() {
   const selected = [];
   state.selectedTaskIds.forEach((taskId) => {
@@ -79,6 +111,24 @@ function getSelectedTasks() {
 function setActiveTask(taskId) {
   state.activeTaskId = taskId;
   renderDetailPanel();
+}
+
+function focusTask(task) {
+  if (!task || !task.taskId) {
+    return;
+  }
+  if (!state.selectedTaskIds.has(task.taskId)) {
+    state.selectedTaskIds.add(task.taskId);
+    persistSelectedTaskIds();
+  }
+  state.activeTaskId = task.taskId;
+  state.focusedTaskId = task.taskId;
+  if (task.sessionKey && task.sessionKey !== state.activeSessionKey) {
+    loadTimeline(task.sessionKey);
+  } else {
+    renderTimeline();
+    renderDetailPanel();
+  }
 }
 
 function setDetailTab(tab) {
@@ -289,19 +339,14 @@ function renderSessions() {
     textWrap.appendChild(meta);
     card.appendChild(toggle);
     card.appendChild(textWrap);
-    card.addEventListener("click", () => loadTimeline(session.key));
+    card.addEventListener("click", () => {
+      state.focusedTaskId = null;
+      loadTimeline(session.key);
+    });
 
     const taskList = document.createElement("div");
     taskList.className = "task-list";
-    const header = document.createElement("div");
-    header.className = "task-list-header";
-    header.textContent = "Tasks";
-    const count = document.createElement("span");
-    count.className = "task-count";
     const tasksForSession = state.tasksBySession.get(session.key) || [];
-    count.textContent = state.tasksLoaded ? String(tasksForSession.length) : "…";
-    header.appendChild(count);
-    taskList.appendChild(header);
 
     if (!state.tasksLoaded) {
       const empty = document.createElement("div");
@@ -315,29 +360,52 @@ function renderSessions() {
       taskList.appendChild(empty);
     } else {
       tasksForSession.forEach((task) => {
-        const item = document.createElement("label");
+        const item = document.createElement("div");
         item.className = "task-item";
+        item.setAttribute("role", "button");
+        item.setAttribute("tabindex", "0");
+        item.addEventListener("click", () => {
+          if (!checkbox.checked) {
+            checkbox.checked = true;
+          }
+          focusTask(task);
+        });
+        item.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            if (!checkbox.checked) {
+              checkbox.checked = true;
+            }
+            focusTask(task);
+          }
+        });
+
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
         checkbox.checked = state.selectedTaskIds.has(task.taskId);
+        checkbox.addEventListener("click", (event) => event.stopPropagation());
         checkbox.addEventListener("change", () => {
           if (checkbox.checked) {
             state.selectedTaskIds.add(task.taskId);
-            state.activeTaskId = task.taskId;
           } else {
             state.selectedTaskIds.delete(task.taskId);
             if (state.activeTaskId === task.taskId) {
               state.activeTaskId = null;
             }
+            if (state.focusedTaskId === task.taskId) {
+              state.focusedTaskId = null;
+              renderTimeline();
+            }
           }
           persistSelectedTaskIds();
           renderDetailPanel();
         });
+
         const info = document.createElement("div");
         info.className = "task-info";
         const titleEl = document.createElement("div");
         titleEl.className = "task-title";
-        titleEl.textContent = truncateText(task.userMessage || task.taskId);
+        titleEl.textContent = taskDisplayTitle(task);
         const timeEl = document.createElement("div");
         timeEl.className = "task-time";
         timeEl.textContent = formatTaskTime(task.startTs);
@@ -423,13 +491,16 @@ function renderTaskDetail(selectedTasks, activeTask) {
     item.className = "task-detail-item" + (activeTask?.taskId === task.taskId ? " active" : "");
     const title = document.createElement("div");
     title.className = "task-detail-title";
-    title.textContent = truncateText(task.userMessage || task.taskId, 90);
+    title.textContent = taskDisplayTitle(task, 90);
     const meta = document.createElement("div");
     meta.className = "task-detail-meta";
     meta.textContent = `${formatTaskTime(task.startTs)} · ${task.sessionKey}`;
     item.appendChild(title);
     item.appendChild(meta);
-    item.addEventListener("click", () => setActiveTask(task.taskId));
+    item.addEventListener("click", () => {
+      setActiveTask(task.taskId);
+      focusTask(task);
+    });
     list.appendChild(item);
   });
 
@@ -571,7 +642,7 @@ function renderEvolutionDetail(selectedTasks) {
     header.className = "analysis-header";
     const title = document.createElement("div");
     title.className = "analysis-title";
-    title.textContent = truncateText(task.userMessage || task.taskId, 90);
+    title.textContent = taskDisplayTitle(task, 90);
     const meta = document.createElement("div");
     meta.className = "analysis-meta";
     meta.textContent = formatTaskTime(task.startTs);
@@ -701,9 +772,21 @@ function renderTimeline() {
   }
 
   const search = state.search.trim().toLowerCase();
+  const focusedTask =
+    state.focusedTaskId && state.tasksById.get(state.focusedTaskId);
+  const focusRange =
+    focusedTask && focusedTask.sessionKey === state.activeSessionKey
+      ? getTaskRange(focusedTask)
+      : null;
+
   const filtered = state.events.filter((event) => {
     if (!state.filters.has(event.kind)) {
       return false;
+    }
+    if (focusRange) {
+      if (event.ts < focusRange.start || event.ts > focusRange.end) {
+        return false;
+      }
     }
     if (!search) {
       return true;
@@ -715,7 +798,13 @@ function renderTimeline() {
   state.filteredEventIds = new Set(filtered.map((event) => getEventKey(event)));
 
   if (!filtered.length) {
-    timelineEl.appendChild(createEmptyState("No events match the current filters"));
+    timelineEl.appendChild(
+      createEmptyState(
+        focusRange
+          ? "No events found in the focused task range."
+          : "No events match the current filters",
+      ),
+    );
     renderDetailPanel();
     return;
   }
