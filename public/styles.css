@@ -445,6 +445,31 @@ body::after {
     0 14px 24px rgba(0, 0, 0, 0.25);
 }
 
+.view-label {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.24em;
+  color: rgba(233, 255, 247, 0.5);
+  pointer-events: none;
+  transition: color 0.3s ease;
+}
+
+.view-label-left {
+  left: 18px;
+}
+
+.view-label-right {
+  right: 18px;
+}
+
+.view-switch[data-active="task"] .view-label-left,
+.view-switch[data-active="evolution"] .view-label-right {
+  color: rgba(233, 255, 247, 0.9);
+}
+
 .view-option {
   position: absolute;
   inset: 0 auto 0 0;
@@ -471,25 +496,13 @@ body::after {
   inset: 4px auto 4px 4px;
   width: calc(50% - 4px);
   border-radius: 999px;
-  background: rgba(28, 48, 54, 0.96);
-  box-shadow: 0 14px 22px rgba(94, 241, 198, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  background: radial-gradient(circle at center, rgba(94, 241, 198, 0.2), rgba(16, 22, 28, 0.95) 70%);
+  box-shadow: 0 0 24px rgba(94, 241, 198, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   transform: translateX(0);
   transition: transform 0.32s ease, box-shadow 0.32s ease;
   pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   z-index: 1;
-}
-
-.view-indicator-label {
-  font-family: var(--font-body);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
-  color: #e9fff7;
-  text-shadow: 0 6px 16px rgba(94, 241, 198, 0.35);
 }
 
 .view-switch[data-active="evolution"] .view-indicator {
