@@ -297,7 +297,9 @@ function getSelectedTasks() {
 }
 
 function getSelectedTaskIdsArray() {
-  return [...state.selectedTaskIds];
+  return getSelectedTasks()
+    .map((task) => task.taskId)
+    .filter((taskId) => typeof taskId === "string" && taskId.length > 0);
 }
 
 function reportMatchesTaskSelection(report, taskIds) {
@@ -400,6 +402,25 @@ function persistSelectedTaskIds() {
     localStorage.setItem(SELECTED_TASKS_KEY, JSON.stringify([...state.selectedTaskIds]));
   } catch {
     // ignore
+  }
+}
+
+function pruneSelectedTaskIds() {
+  if (!state.selectedTaskIds.size) {
+    return;
+  }
+  const next = new Set();
+  let changed = false;
+  state.selectedTaskIds.forEach((taskId) => {
+    if (state.tasksById.has(taskId)) {
+      next.add(taskId);
+    } else {
+      changed = true;
+    }
+  });
+  if (changed) {
+    state.selectedTaskIds = next;
+    persistSelectedTaskIds();
   }
 }
 
@@ -1317,6 +1338,7 @@ async function loadTasks() {
     bySession.forEach((list) => list.sort((a, b) => a.startTs - b.startTs));
     state.tasksBySession = bySession;
     state.tasksById = byId;
+    pruneSelectedTaskIds();
     state.tasksLoaded = true;
     renderSessions();
     updateActiveSessionCard();
