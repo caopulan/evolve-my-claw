@@ -18,6 +18,7 @@ const state = {
     "assistant_message",
     "tool",
     "subagent_run",
+    "subagent_result",
     "compaction",
     "agent_event",
     "model_change",

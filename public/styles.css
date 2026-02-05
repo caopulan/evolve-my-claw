@@ -1403,6 +1403,11 @@ body::after {
   --accent-soft: rgba(47, 155, 93, 0.16);
 }
 
+.event.subagent_result {
+  --accent: var(--accent-subagent);
+  --accent-soft: rgba(47, 155, 93, 0.16);
+}
+
 .event.compaction {
   --accent: var(--accent-compaction);
   --accent-soft: rgba(122, 90, 200, 0.16);

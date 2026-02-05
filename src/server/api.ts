@@ -90,6 +90,119 @@ function extractSessionHints(events: TimelineEvent[]): Map<
   return hints;
 }
 
+type SubagentResultMeta = {
+  childSessionKey: string;
+  sessionId?: string;
+  label?: string;
+};
+
+function extractSubagentResultMeta(text: string): SubagentResultMeta | null {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const lowered = trimmed.toLowerCase();
+  if (!lowered.includes("sessionkey")) {
+    return null;
+  }
+  const keyMatch = trimmed.match(/sessionKey\s+(\S+)/i);
+  if (!keyMatch?.[1]) {
+    return null;
+  }
+  const childSessionKey = keyMatch[1].trim();
+  if (!childSessionKey.includes(":subagent:")) {
+    return null;
+  }
+  const hasBackgroundMarker =
+    lowered.includes("background task") || trimmed.includes("后台任务");
+  const hasStatsMarker = lowered.includes("stats:") || lowered.includes("runtime");
+  if (!hasBackgroundMarker && !hasStatsMarker) {
+    return null;
+  }
+  const sessionIdMatch = trimmed.match(/sessionId\s+(\S+)/i);
+  const labelMatch = trimmed.match(/background task \"([^\"]+)\"/i);
+  const labelZhMatch = trimmed.match(/后台任务[“"]([^”"]+)[”"]/);
+  const label = labelMatch?.[1]?.trim() ?? labelZhMatch?.[1]?.trim();
+  return {
+    childSessionKey,
+    sessionId: sessionIdMatch?.[1]?.trim(),
+    label: label || undefined,
+  };
+}
+
+function collectSubagentRuns(events: TimelineEvent[], map: Map<string, TimelineEvent>): void {
+  for (const event of events) {
+    if (event.kind === "subagent_run") {
+      const details = asRecord(event.details);
+      const childSessionKey =
+        typeof details?.childSessionKey === "string" ? details.childSessionKey : undefined;
+      if (childSessionKey) {
+        map.set(childSessionKey, event);
+      }
+    }
+    if (Array.isArray(event.children) && event.children.length > 0) {
+      collectSubagentRuns(event.children, map);
+    }
+  }
+}
+
+function attachSubagentResultMessages(events: TimelineEvent[]): TimelineEvent[] {
+  const runsBySessionKey = new Map<string, TimelineEvent>();
+  collectSubagentRuns(events, runsBySessionKey);
+
+  const rewrite = (list: TimelineEvent[]): TimelineEvent[] => {
+    const next: TimelineEvent[] = [];
+    for (const event of list) {
+      if (event.kind === "user_message") {
+        const details = asRecord(event.details);
+        const text = typeof details?.text === "string" ? details.text : "";
+        const meta = extractSubagentResultMeta(text);
+        if (meta) {
+          const summary =
+            meta.label ? `Subagent result: ${meta.label}` : event.summary ?? "Subagent result";
+          const converted: TimelineEvent = {
+            ...event,
+            kind: "subagent_result",
+            summary,
+            details: {
+              ...(details ?? {}),
+              subagent: {
+                childSessionKey: meta.childSessionKey,
+                sessionId: meta.sessionId,
+                label: meta.label,
+              },
+            },
+          };
+          const run = runsBySessionKey.get(meta.childSessionKey);
+          if (run) {
+            if (!Array.isArray(run.children)) {
+              run.children = [];
+            }
+            run.children.push(converted);
+            continue;
+          }
+          next.push(converted);
+          continue;
+        }
+      }
+
+      if (Array.isArray(event.children) && event.children.length > 0) {
+        event.children = rewrite(event.children);
+      }
+      next.push(event);
+    }
+    return next;
+  };
+
+  const rewritten = rewrite(events);
+  for (const run of runsBySessionKey.values()) {
+    if (Array.isArray(run.children)) {
+      run.children.sort((a, b) => a.ts - b.ts);
+    }
+  }
+  return rewritten;
+}
+
 function extractChildSessionKeyFromToolResult(result: unknown): string | undefined {
   if (!result) {
     return undefined;
@@ -343,9 +456,10 @@ export async function buildTimeline(params: {
     loadCapturedAgentEvents({ stateDir, sessionKey: session.key }),
   ]);
 
+  const transcriptWithSubagentResults = attachSubagentResultMessages(transcriptEvents);
   const agentTimeline = capturedEventsToTimeline(agentEvents, session.key, session.sessionId);
 
-  const events = [...transcriptEvents, ...agentTimeline].sort((a, b) => a.ts - b.ts);
+  const events = [...transcriptWithSubagentResults, ...agentTimeline].sort((a, b) => a.ts - b.ts);
   return { session, events };
 }
 
