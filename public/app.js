@@ -1068,9 +1068,10 @@ function renderEvolutionView() {
     meta.className = "evolution-report-meta";
     const dims = (report.dimensions || []).map(formatDimensionLabel).join(" · ");
     const targets = (report.changeTargets || []).map(formatChangeTargetLabel).join(" · ");
+    const searchFlag = report.useSearch ? "search:on" : "search:off";
     meta.textContent = `${formatTaskTime(report.createdAt)} · ${dims || "no dimensions"} · ${
       targets || "no targets"
-    }`;
+    } · ${searchFlag}`;
     header.appendChild(title);
     header.appendChild(meta);
     reportCard.appendChild(header);

@@ -286,6 +286,7 @@ export async function analyzeEvolutionReport(params: {
     taskIds: params.tasks.map((task) => task.taskId),
     dimensions: params.dimensions,
     changeTargets: params.changeTargets,
+    useSearch: params.useSearch,
     summary,
     items: actionableItems,
     rawResponse: rawText ? truncateText(rawText, MAX_RAW_RESPONSE_CHARS) : undefined,

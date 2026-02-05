@@ -78,6 +78,7 @@ export type EvolutionReportRecord = {
   taskIds: string[];
   dimensions: EvolutionDimension[];
   changeTargets: EvolutionChangeTarget[];
+  useSearch?: boolean;
   summary: string;
   items: EvolutionReportItem[];
   rawResponse?: string;
