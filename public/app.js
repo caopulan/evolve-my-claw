@@ -14,6 +14,7 @@ const state = {
   analysesLoaded: false,
   filters: new Set([
     "user_message",
+    "assistant_message",
     "tool",
     "subagent_run",
     "compaction",
@@ -63,6 +64,110 @@ function createEmptyState(message) {
   return empty;
 }
 
+function escapeHtml(text) {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeUrl(url) {
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("//")) {
+    return `https:${trimmed}`;
+  }
+  return null;
+}
+
+function renderInlineMarkdown(text) {
+  const safe = escapeHtml(text);
+  const withCode = safe.replace(/`([^`]+)`/g, "<code>$1</code>");
+  const withBold = withCode.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  const withItalic = withBold.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+  const withLinks = withItalic.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label, url) => {
+    const safeUrl = sanitizeUrl(url);
+    if (!safeUrl) {
+      return label;
+    }
+    return `<a href=\"${safeUrl}\" target=\"_blank\" rel=\"noopener noreferrer\">${label}</a>`;
+  });
+  return withLinks;
+}
+
+function renderBlockMarkdown(text) {
+  const lines = text.split(/\r?\n/);
+  const html = [];
+  let inUl = false;
+  let inOl = false;
+
+  const closeLists = () => {
+    if (inUl) {
+      html.push("</ul>");
+      inUl = false;
+    }
+    if (inOl) {
+      html.push("</ol>");
+      inOl = false;
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) {
+      closeLists();
+      continue;
+    }
+    const headingMatch = line.match(/^(#{1,3})\s+(.*)$/);
+    if (headingMatch) {
+      closeLists();
+      const level = headingMatch[1].length;
+      const tag = level === 1 ? "h4" : level === 2 ? "h5" : "h6";
+      html.push(`<${tag}>${renderInlineMarkdown(headingMatch[2])}</${tag}>`);
+      continue;
+    }
+    const ulMatch = line.match(/^[-*]\s+(.*)$/);
+    if (ulMatch) {
+      if (!inUl) {
+        closeLists();
+        html.push("<ul>");
+        inUl = true;
+      }
+      html.push(`<li>${renderInlineMarkdown(ulMatch[1])}</li>`);
+      continue;
+    }
+    const olMatch = line.match(/^\d+\.\s+(.*)$/);
+    if (olMatch) {
+      if (!inOl) {
+        closeLists();
+        html.push("<ol>");
+        inOl = true;
+      }
+      html.push(`<li>${renderInlineMarkdown(olMatch[1])}</li>`);
+      continue;
+    }
+    closeLists();
+    html.push(`<p>${renderInlineMarkdown(line)}</p>`);
+  }
+
+  closeLists();
+  return html.join("");
+}
+
+function setMarkdown(el, text, mode = "inline") {
+  if (!el) {
+    return;
+  }
+  const content = text ?? "";
+  el.innerHTML = mode === "block" ? renderBlockMarkdown(content) : renderInlineMarkdown(content);
+  el.classList.toggle("md-block", mode === "block");
+  el.classList.toggle("md-inline", mode === "inline");
+}
+
 function truncateText(text, max = 80) {
   const trimmed = text.trim();
   if (trimmed.length <= max) {
@@ -95,6 +200,9 @@ function getTaskRange(task) {
         end = end == null ? candidate : Math.max(end, candidate);
       }
     }
+  }
+  if (task.assistantReply && typeof task.assistantReply.ts === "number") {
+    end = end == null ? task.assistantReply.ts : Math.max(end, task.assistantReply.ts);
   }
   if (start == null) {
     return null;
@@ -482,7 +590,7 @@ function renderDetailPanel() {
     return;
   }
 
-  detailTitleEl.textContent = event.summary || "(no summary)";
+  setMarkdown(detailTitleEl, event.summary || "(no summary)");
   detailSubtitleEl.textContent = `${event.kind.replace(/_/g, " ")} · ${formatTime(event.ts)}`;
 
   if (!state.filteredEventIds.has(getEventKey(event))) {
@@ -599,7 +707,7 @@ function renderEvolutionView() {
     if (record.analysis?.summary) {
       const summary = document.createElement("div");
       summary.className = "analysis-summary";
-      summary.textContent = record.analysis.summary;
+      setMarkdown(summary, record.analysis.summary, "block");
       card.appendChild(summary);
     }
 
@@ -637,7 +745,7 @@ function renderEvolutionView() {
       record.analysis.issues.forEach((issue) => {
         const item = document.createElement("div");
         item.className = "analysis-item";
-        item.textContent = issue;
+        setMarkdown(item, issue);
         issues.appendChild(item);
       });
       card.appendChild(issues);
@@ -653,7 +761,7 @@ function renderEvolutionView() {
       record.analysis.suggestions.forEach((suggestion) => {
         const item = document.createElement("div");
         item.className = "analysis-item";
-        item.textContent = suggestion;
+        setMarkdown(item, suggestion);
         suggestions.appendChild(item);
       });
       card.appendChild(suggestions);
@@ -669,7 +777,7 @@ function renderEvolutionView() {
       record.analysis.steps.forEach((step) => {
         const item = document.createElement("div");
         item.className = "analysis-item";
-        item.textContent = step.evidence ? `${step.what} (${step.evidence})` : step.what;
+        setMarkdown(item, step.evidence ? `${step.what} (${step.evidence})` : step.what);
         steps.appendChild(item);
       });
       card.appendChild(steps);
@@ -761,7 +869,7 @@ function renderTimeline() {
 
     const summary = document.createElement("div");
     summary.className = "event-summary";
-    summary.textContent = event.summary || "(no summary)";
+    setMarkdown(summary, event.summary || "(no summary)");
 
     wrapper.appendChild(header);
     wrapper.appendChild(summary);

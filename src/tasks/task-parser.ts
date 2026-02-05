@@ -24,6 +24,12 @@ export type TaskContinuation = {
   kind: "subagent_request" | "background_result" | "followup";
 };
 
+export type TaskAssistantMessage = {
+  messageId: string;
+  ts: number;
+  text: string;
+};
+
 export type TaskCandidateRecord = {
   type: "task_candidate";
   taskId: string;
@@ -37,6 +43,7 @@ export type TaskCandidateRecord = {
   agentId: string;
   userMessageId: string;
   userMessage: string;
+  assistantReply?: TaskAssistantMessage;
   startTs: number;
   endTs?: number;
   toolCalls: TaskToolCall[];
@@ -54,6 +61,7 @@ type CandidateBuilder = {
   agentId: string;
   userMessageId: string;
   userMessage: string;
+  assistantReply?: TaskAssistantMessage;
   startTs: number;
   endTs?: number;
   toolCalls: TaskToolCall[];
@@ -61,6 +69,7 @@ type CandidateBuilder = {
 };
 
 const CONTINUATION_MAX_CHARS = 2000;
+const ASSISTANT_MAX_CHARS = 4000;
 
 function truncateText(value: string, max = CONTINUATION_MAX_CHARS): string {
   const trimmed = value.trim();
@@ -100,6 +109,19 @@ function isAnalysisPromptMessage(text: string): boolean {
     return true;
   }
   return false;
+}
+
+function isAnalysisAssistantMessage(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{")) {
+    return false;
+  }
+  return (
+    trimmed.includes("\"title\"") &&
+    trimmed.includes("\"summary\"") &&
+    trimmed.includes("\"status\"") &&
+    trimmed.includes("\"confidence\"")
+  );
 }
 
 function extractBackgroundLabel(text: string): string | undefined {
@@ -211,6 +233,7 @@ function finalizeCandidate(candidate: CandidateBuilder | null): TaskCandidateRec
     agentId: candidate.agentId,
     userMessageId: candidate.userMessageId,
     userMessage: candidate.userMessage,
+    assistantReply: candidate.assistantReply,
     startTs: candidate.startTs,
     endTs: candidate.endTs,
     toolCalls: candidate.toolCalls,
@@ -231,6 +254,7 @@ export function buildTaskCandidates(params: {
   const spawnBySessionKey = new Map<string, string>();
   const spawnByLabel = new Map<string, string>();
   let current: CandidateBuilder | null = null;
+  let ignoreAssistant = false;
 
   const attachContinuation = (taskId: string, continuation: TaskContinuation): boolean => {
     if (current && current.taskId === taskId) {
@@ -254,6 +278,7 @@ export function buildTaskCandidates(params: {
         typeof event.details?.text === "string" ? event.details.text : event.summary ?? "";
       const userMessage = userMessageRaw.trim();
       if (userMessage && isAnalysisPromptMessage(userMessage)) {
+        ignoreAssistant = true;
         continue;
       }
       if (userMessage && isBackgroundCompletionMessage(userMessage)) {
@@ -280,6 +305,7 @@ export function buildTaskCandidates(params: {
         candidates.push(finished);
         candidatesById.set(finished.taskId, finished);
       }
+      ignoreAssistant = false;
       current = {
         taskId: `task-${params.session.sessionId}-${event.id}`,
         createdAt: event.ts,
@@ -290,6 +316,7 @@ export function buildTaskCandidates(params: {
         agentId: params.session.agentId,
         userMessageId: event.id,
         userMessage: userMessage,
+        assistantReply: undefined,
         startTs: event.ts,
         toolCalls: [],
         continuations: [],
@@ -298,6 +325,26 @@ export function buildTaskCandidates(params: {
     }
 
     if (!current) {
+      continue;
+    }
+
+    if (event.kind === "assistant_message") {
+      if (ignoreAssistant) {
+        continue;
+      }
+      const textRaw = typeof event.details?.text === "string" ? event.details.text : event.summary ?? "";
+      const text = textRaw.trim();
+      if (!text || isAnalysisAssistantMessage(text)) {
+        continue;
+      }
+      current.assistantReply = {
+        messageId: event.id,
+        ts: event.ts,
+        text: truncateText(text, ASSISTANT_MAX_CHARS),
+      };
+      if (!current.endTs || event.ts > current.endTs) {
+        current.endTs = event.ts;
+      }
       continue;
     }
 
