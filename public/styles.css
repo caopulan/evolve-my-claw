@@ -446,25 +446,6 @@ body::after {
     0 14px 24px rgba(0, 0, 0, 0.25);
 }
 
-.view-label {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.22em;
-  color: var(--ink-faint);
-  pointer-events: none;
-}
-
-.view-label-left {
-  left: 18px;
-}
-
-.view-label-right {
-  right: 18px;
-}
-
 .view-option {
   position: relative;
   z-index: 2;
@@ -512,6 +493,18 @@ body::after {
 
 .view-switch[data-active="evolution"] .view-indicator {
   transform: translateX(100%);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .title-stack h2 {

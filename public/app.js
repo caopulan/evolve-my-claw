@@ -297,7 +297,7 @@ function setMainView(view) {
     btn.setAttribute("aria-selected", isActive ? "true" : "false");
     btn.setAttribute("tabindex", isActive ? "0" : "-1");
     if (isActive) {
-      activeLabel = btn.textContent?.trim() || "";
+      activeLabel = btn.dataset.label || btn.textContent?.trim() || "";
     }
   });
   if (viewSwitchEl) {
