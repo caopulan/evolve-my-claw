@@ -6,13 +6,40 @@ This repository contains **Evolve My Claw**, an external timeline and evolution 
 
 - Provide a standalone timeline viewer for OpenClaw sessions.
 - Optionally capture gateway agent events into JSONL for enrichment.
+- Generate task-level logs (JSONL) from OpenClaw sessions without explicit task markers.
+- Analyze task candidates with OpenClaw itself (LLM) and append structured analysis JSONL.
 - Avoid modifying the OpenClaw repo unless explicitly requested.
+
+## Capabilities
+
+- **Task candidates**: `emc parse` scans session transcripts and writes candidate tasks to `~/.openclaw/evolve-my-claw/tasks.jsonl`. Each user message is a task boundary; tasks with no tool calls are filtered out.
+- **Task analysis**: `emc analyze` sends each candidate to an OpenClaw agent and writes `~/.openclaw/evolve-my-claw/tasks.analysis.jsonl` with structured JSON analysis.
+- **Event capture**: `emc capture` connects to the gateway and appends agent events to `~/.openclaw/evolve-my-claw/agent-events.jsonl`.
+- **Timeline UI**: `emc serve` reads local session logs + optional captured events and serves a timeline viewer.
+
+## Config (JSON)
+
+Default path: `~/.openclaw/evolve-my-claw/config.json`
+
+```json
+{
+  "excludeAgentIds": ["evolver"],
+  "excludeTools": ["message/send", "message/thread-reply"],
+  "analysisAgentId": "evolver",
+  "analysisTimeoutSeconds": 120
+}
+```
+
+Notes:
+- Exclude the analysis agent (`analysisAgentId`) to avoid log recursion.
+- Filter outbound send tools (`message/send`, `message/thread-reply`) so messaging isn’t treated as task work.
 
 ## Project Layout
 
 - `src/cli.ts`: CLI entrypoint (`emc`).
 - `src/server/`: Local HTTP server + API.
 - `src/ingest/`: Parsers for session transcripts, subagent registry, and captured events.
+- `src/tasks/`: Task candidate parsing + LLM analysis.
 - `public/`: Static UI (HTML/CSS/JS).
 
 ## Commands
@@ -21,6 +48,8 @@ This repository contains **Evolve My Claw**, an external timeline and evolution 
 - Build: `pnpm build`
 - Run UI: `node dist/cli.js serve`
 - Capture events: `node dist/cli.js capture`
+- Parse task candidates: `node dist/cli.js parse`
+- Analyze tasks (LLM): `node dist/cli.js analyze --agent <agentId>`
 
 ## Data Sources
 
@@ -28,6 +57,8 @@ This repository contains **Evolve My Claw**, an external timeline and evolution 
 - Session index: `~/.openclaw/agents/<agentId>/sessions/sessions.json`
 - Subagent registry: `~/.openclaw/subagents/runs.json`
 - Captured events (this tool): `~/.openclaw/evolve-my-claw/agent-events.jsonl`
+- Task candidates: `~/.openclaw/evolve-my-claw/tasks.jsonl`
+- Task analysis: `~/.openclaw/evolve-my-claw/tasks.analysis.jsonl`
 
 ## Coding Notes
 
