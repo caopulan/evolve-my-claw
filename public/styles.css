@@ -1101,6 +1101,16 @@ body::after {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.08);
   align-items: flex-start;
+  cursor: pointer;
+}
+
+.json-leaf:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.json-leaf.is-markdown {
+  border-color: rgba(94, 241, 198, 0.5);
+  background: rgba(94, 241, 198, 0.08);
 }
 
 .json-key {
@@ -1122,7 +1132,6 @@ body::after {
   color: var(--ink);
   white-space: pre-wrap;
   word-break: break-word;
-  cursor: pointer;
   padding: 2px 4px;
   border-radius: 6px;
   transition: background 0.2s ease;

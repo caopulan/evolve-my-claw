@@ -366,6 +366,8 @@ function getJsonType(value) {
 function createJsonLeaf(key, value) {
   const row = document.createElement("div");
   row.className = "json-leaf";
+  row.setAttribute("role", "button");
+  row.setAttribute("tabindex", "0");
 
   if (key !== null && typeof key !== "undefined") {
     const keySpan = document.createElement("span");
@@ -388,19 +390,33 @@ function createJsonLeaf(key, value) {
   valueSpan.dataset.raw = rawText;
   valueSpan.dataset.formatted = formatted;
   valueSpan.dataset.mode = "plain";
-  valueSpan.addEventListener("click", (event) => {
-    event.stopPropagation();
+  const toggleMarkdown = () => {
     const mode = valueSpan.dataset.mode || "plain";
     if (mode === "markdown") {
       valueSpan.textContent = formatted;
       valueSpan.dataset.mode = "plain";
       valueSpan.classList.remove("is-markdown", "md-inline", "md-block");
+      row.classList.remove("is-markdown");
       return;
     }
     const displayMode = guessMarkdownMode(rawText);
     setMarkdown(valueSpan, rawText, displayMode);
     valueSpan.dataset.mode = "markdown";
     valueSpan.classList.add("is-markdown");
+    row.classList.add("is-markdown");
+  };
+  row.addEventListener("click", (event) => {
+    const target = event.target;
+    if (target && target.closest && target.closest("a")) {
+      return;
+    }
+    toggleMarkdown();
+  });
+  row.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleMarkdown();
+    }
   });
   row.appendChild(valueSpan);
 
