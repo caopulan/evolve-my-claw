@@ -88,7 +88,19 @@
             <span>Session info</span>
           </label>
         </div>
-        <div id="timeline" class="timeline"></div>
+        <div class="content-grid">
+          <section class="timeline-wrap">
+            <div id="timeline" class="timeline"></div>
+          </section>
+          <aside class="detail-panel" id="detail-panel">
+            <div class="detail-header">
+              <span class="detail-label">Selected event</span>
+              <h3 id="detail-title">No event selected</h3>
+              <p id="detail-subtitle" class="muted"></p>
+            </div>
+            <div class="detail-body" id="detail-body"></div>
+          </aside>
+        </div>
       </main>
     </div>
     <script src="/app.js"></script>
