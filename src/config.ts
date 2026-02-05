@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveOpenClawStateDir, resolveTelemetryDir } from "./paths.js";
+import { EVOLUTION_AGENT_ID } from "./evolution/constants.js";
 
 export type EvolveConfig = {
   excludeAgentIds: string[];
@@ -10,9 +11,9 @@ export type EvolveConfig = {
 };
 
 const DEFAULT_CONFIG: EvolveConfig = {
-  excludeAgentIds: ["evolver"],
+  excludeAgentIds: [EVOLUTION_AGENT_ID, "evolver"],
   excludeTools: ["message/send", "message/thread-reply"],
-  analysisAgentId: "evolver",
+  analysisAgentId: EVOLUTION_AGENT_ID,
   analysisTimeoutSeconds: 120,
 };
 

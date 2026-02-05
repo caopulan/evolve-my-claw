@@ -56,9 +56,9 @@ Example:
 
 ```json
 {
-  "excludeAgentIds": ["evolver"],
+  "excludeAgentIds": ["evolve-my-claw"],
   "excludeTools": ["message/send", "message/thread-reply"],
-  "analysisAgentId": "evolver",
+  "analysisAgentId": "evolve-my-claw",
   "analysisTimeoutSeconds": 120
 }
 ```
@@ -66,7 +66,7 @@ Example:
 ## Analyze tasks with OpenClaw (optional)
 
 ```bash
-node dist/cli.js analyze --agent evolver
+node dist/cli.js analyze --agent evolve-my-claw
 ```
 
 This appends analysis records to:
@@ -78,8 +78,17 @@ This appends analysis records to:
 If the gateway requires auth:
 
 ```bash
-node dist/cli.js analyze --agent evolver --token <gateway-token>
+node dist/cli.js analyze --agent evolve-my-claw --token <gateway-token>
 ```
+
+## Ensure evolution agent (recommended once)
+
+```bash
+node dist/cli.js evolution
+```
+
+This ensures an `evolve-my-claw` agent exists in OpenClaw with its own workspace
+and full tools/skills enabled.
 
 ## Notes
 

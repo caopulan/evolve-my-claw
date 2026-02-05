@@ -74,9 +74,9 @@ node dist/cli.js parse
 
 ```json
 {
-  "excludeAgentIds": ["evolver"],
+  "excludeAgentIds": ["evolve-my-claw"],
   "excludeTools": ["message/send", "message/thread-reply"],
-  "analysisAgentId": "evolver",
+  "analysisAgentId": "evolve-my-claw",
   "analysisTimeoutSeconds": 120
 }
 ```
@@ -92,14 +92,23 @@ node dist/cli.js parse
 启动方式：
 
 ```bash
-node dist/cli.js analyze --agent evolver
+node dist/cli.js analyze --agent evolve-my-claw
 ```
 
 如果 gateway 需要认证：
 
 ```bash
-node dist/cli.js analyze --agent evolver --token <gateway-token>
+node dist/cli.js analyze --agent evolve-my-claw --token <gateway-token>
 ```
+
+## 初始化 evolution Agent（建议一次性执行）
+
+```bash
+node dist/cli.js evolution
+```
+
+该命令会确保 OpenClaw 中存在 `evolve-my-claw` agent，并创建独立的 workspace 文件，
+同时启用全量 tools/skills。
 
 ## 常见参数
 

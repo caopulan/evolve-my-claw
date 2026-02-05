@@ -12,6 +12,8 @@ import { buildTaskCandidates, mergeSubagentCandidates } from "./tasks/task-parse
 import { appendTaskRecords, loadTaskIndex, loadTaskRecords } from "./tasks/task-store.js";
 import { analyzeTaskCandidate } from "./tasks/task-analyzer.js";
 import { appendAnalysisRecords, loadAnalysisIndex } from "./tasks/analysis-store.js";
+import { ensureEvolutionAgent } from "./evolution/ensure-agent.js";
+import { EVOLUTION_AGENT_ID } from "./evolution/constants.js";
 
 const program = new Command();
 
@@ -136,10 +138,46 @@ program
   });
 
 program
+  .command("evolution")
+  .description("Ensure evolve-my-claw agent exists with dedicated workspace and full tools/skills")
+  .option("--state-dir <dir>", "OpenClaw state dir override")
+  .option("--openclaw-config <file>", "OpenClaw config path override")
+  .option("--source-agent <id>", "Copy auth/models/workspace files from agent", "main")
+  .option("--no-copy-skills", "Do not copy workspace skills from the source agent")
+  .action((opts) => {
+    const stateDir = opts.stateDir ? path.resolve(opts.stateDir) : resolveOpenClawStateDir();
+    const ensure = ensureEvolutionAgent({
+      stateDir,
+      configPath: opts.openclawConfig ? path.resolve(String(opts.openclawConfig)) : undefined,
+      sourceAgentId: opts.sourceAgent ? String(opts.sourceAgent).trim() : undefined,
+      copySkills: opts.copySkills !== false,
+    });
+
+    const notes = [
+      ensure.updatedConfig
+        ? `updated OpenClaw config at ${ensure.configPath}`
+        : `OpenClaw config already includes ${ensure.agentId}`,
+      ensure.createdWorkspace
+        ? `created workspace at ${ensure.workspaceDir}`
+        : `workspace already present at ${ensure.workspaceDir}`,
+      ensure.createdAgentDir
+        ? `created agent dir at ${ensure.agentDir}`
+        : `agent dir already present at ${ensure.agentDir}`,
+    ];
+    for (const note of notes) {
+      console.log(`evolve-my-claw: ${note}`);
+    }
+    for (const note of ensure.notes) {
+      console.log(`evolve-my-claw: ${note}`);
+    }
+  });
+
+program
   .command("analyze")
   .description("Analyze task candidates via OpenClaw agent and append analysis JSONL")
   .option("--state-dir <dir>", "OpenClaw state dir override")
   .option("--config <file>", "Config JSON path override")
+  .option("--openclaw-config <file>", "OpenClaw config path override")
   .option("--agent <id>", "Agent id for analysis (default from config)")
   .option("--url <wsUrl>", "Gateway WebSocket URL", "ws://127.0.0.1:18789")
   .option("--token <token>", "Gateway token (if required)")
@@ -170,6 +208,22 @@ program
     if (selected.length === 0) {
       console.log("evolve-my-claw: no tasks to analyze");
       return;
+    }
+
+    if (analysisAgentId.toLowerCase() === EVOLUTION_AGENT_ID) {
+      const ensure = ensureEvolutionAgent({
+        stateDir,
+        configPath: opts.openclawConfig ? path.resolve(String(opts.openclawConfig)) : undefined,
+      });
+      if (ensure.updatedConfig) {
+        console.log(`evolve-my-claw: updated OpenClaw config at ${ensure.configPath}`);
+      }
+      if (ensure.createdWorkspace) {
+        console.log(`evolve-my-claw: created workspace at ${ensure.workspaceDir}`);
+      }
+      if (ensure.createdAgentDir) {
+        console.log(`evolve-my-claw: created agent dir at ${ensure.agentDir}`);
+      }
     }
 
     let readyResolve: (() => void) | undefined;
