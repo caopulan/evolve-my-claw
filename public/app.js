@@ -393,6 +393,116 @@ function taskDisplayTitle(task, max = 80) {
   return truncateText(noId, max);
 }
 
+const SESSION_PROVIDER_LABELS = {
+  discord: "Discord",
+  telegram: "Telegram",
+  slack: "Slack",
+  signal: "Signal",
+  imessage: "iMessage",
+  whatsapp: "WhatsApp",
+  webchat: "Webchat",
+  main: "Main",
+};
+
+function formatSessionProviderLabel(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) {
+    return "";
+  }
+  return SESSION_PROVIDER_LABELS[normalized] || normalized.slice(0, 1).toUpperCase() + normalized.slice(1);
+}
+
+function formatSessionChannelLabel(session) {
+  const info = session?.keyInfo && typeof session.keyInfo === "object" ? session.keyInfo : null;
+  const meta = info?.meta && typeof info.meta === "object" ? info.meta : null;
+  const space = typeof meta?.space === "string" ? meta.space.trim() : "";
+  const groupChannel = typeof meta?.groupChannel === "string" ? meta.groupChannel.trim() : "";
+  const subject = typeof meta?.subject === "string" ? meta.subject.trim() : "";
+
+  if (space && groupChannel) {
+    if (groupChannel.startsWith("#")) {
+      return `${space}${groupChannel}`;
+    }
+    return `${space}#${groupChannel}`;
+  }
+  if (groupChannel) {
+    return groupChannel;
+  }
+  if (subject) {
+    return subject;
+  }
+
+  const originLabel = typeof meta?.originLabel === "string" ? meta.originLabel.trim() : "";
+  if (originLabel) {
+    return originLabel;
+  }
+
+  const peerId = typeof info?.peerId === "string" ? info.peerId.trim() : "";
+  if (peerId) {
+    return truncateText(peerId, 42);
+  }
+
+  const mainKey = typeof info?.mainKey === "string" ? info.mainKey.trim() : "";
+  if (mainKey && mainKey !== "main") {
+    return truncateText(mainKey, 42);
+  }
+
+  return "";
+}
+
+function formatSessionTitle(session) {
+  const info = session?.keyInfo && typeof session.keyInfo === "object" ? session.keyInfo : null;
+  const kind = typeof session?.kind === "string" ? session.kind : "";
+  const provider = typeof info?.provider === "string" ? info.provider.trim() : "";
+  const head =
+    kind === "subagent"
+      ? "Subagent"
+      : kind === "cron"
+        ? "Cron"
+        : kind === "hook"
+          ? "Hook"
+          : kind === "node"
+            ? "Node"
+            : kind === "acp"
+              ? "ACP"
+              : formatSessionProviderLabel(provider || "main");
+  const detail = formatSessionChannelLabel(session);
+  return detail ? `${head} · ${detail}` : head;
+}
+
+function formatSessionMeta(session, tasksCount) {
+  const agentId = typeof session?.agentId === "string" ? session.agentId : "";
+  const kind = typeof session?.kind === "string" ? session.kind : "";
+  const info = session?.keyInfo && typeof session.keyInfo === "object" ? session.keyInfo : null;
+  const threadKind = typeof info?.threadKind === "string" ? info.threadKind : "";
+  const threadId = typeof info?.threadId === "string" ? info.threadId.trim() : "";
+
+  const parts = [];
+  if (kind) {
+    parts.push(kind);
+  }
+  if (agentId) {
+    parts.push(`agent:${agentId}`);
+  }
+  if (threadKind && threadId) {
+    parts.push(`${threadKind}:${threadId}`);
+  }
+  if (typeof tasksCount === "number") {
+    parts.push(`${tasksCount} task${tasksCount === 1 ? "" : "s"}`);
+  }
+  return parts.join(" · ");
+}
+
+function sessionSearchText(session) {
+  const info = session?.keyInfo && typeof session.keyInfo === "object" ? session.keyInfo : null;
+  const meta = info?.meta && typeof info.meta === "object" ? info.meta : null;
+  return `${session.displayName ?? ""} ${session.label ?? ""} ${session.key ?? ""} ${session.kind ?? ""} ${
+    session.agentId ?? ""
+  } ${info?.provider ?? ""} ${meta?.space ?? ""} ${meta?.groupChannel ?? ""} ${meta?.subject ?? ""} ${
+    meta?.originLabel ?? ""
+  }`.toLowerCase();
+}
+
 function getTaskRange(task) {
   const start = typeof task.startTs === "number" ? task.startTs : null;
   let end = typeof task.endTs === "number" ? task.endTs : null;
@@ -1005,10 +1115,7 @@ function renderSessions() {
     if (!query) {
       return true;
     }
-    const haystack = `${session.displayName ?? ""} ${session.label ?? ""} ${session.key ?? ""} ${
-      session.kind ?? ""
-    } ${session.agentId ?? ""}`.toLowerCase();
-    return haystack.includes(query);
+    return sessionSearchText(session).includes(query);
   };
   const matchesTask = (task) => {
     if (!query) {
@@ -1070,13 +1177,12 @@ function renderSessions() {
     textWrap.className = "session-text";
     const title = document.createElement("div");
     title.className = "session-title";
-    title.textContent = session.displayName || session.label || session.key;
+    title.textContent = formatSessionTitle(session) || session.displayName || session.label || session.key;
+    title.setAttribute("title", session.key);
     const meta = document.createElement("div");
     meta.className = "session-meta";
     const tasksCount = state.tasksLoaded ? (state.tasksBySession.get(session.key) || []).length : null;
-    meta.textContent = `${session.kind} · ${session.agentId}${
-      tasksCount != null ? ` · ${tasksCount} task${tasksCount === 1 ? "" : "s"}` : ""
-    }`;
+    meta.textContent = formatSessionMeta(session, tasksCount);
     textWrap.appendChild(title);
     textWrap.appendChild(meta);
     card.appendChild(toggle);
@@ -2681,7 +2787,8 @@ async function loadTimeline(sessionKey) {
   state.activeSessionKey = sessionKey;
   updateActiveSessionCard();
   setSessionExpanded(sessionKey, true);
-  sessionTitleEl.textContent = sessionKey;
+  sessionTitleEl.textContent = "Loading session...";
+  sessionTitleEl.setAttribute("title", sessionKey);
   sessionSubtitleEl.textContent = "Loading timeline...";
   const res = await fetch(`/api/timeline?sessionKey=${encodeURIComponent(sessionKey)}`);
   const data = await res.json();
@@ -2690,10 +2797,8 @@ async function loadTimeline(sessionKey) {
   state.eventIndex = normalized.indexMap;
   state.selectedEventId = state.events.length ? getEventKey(state.events[0]) : null;
   state.expandedEventIds = new Set();
-  sessionTitleEl.textContent = data.session?.displayName || data.session?.label || sessionKey;
-  sessionSubtitleEl.textContent = data.session
-    ? `${data.session.kind} · ${data.session.agentId}`
-    : "";
+  sessionTitleEl.textContent = data.session ? formatSessionTitle(data.session) : sessionKey;
+  sessionSubtitleEl.textContent = data.session ? formatSessionMeta(data.session) : "";
   renderTimeline();
 }
 
@@ -2825,10 +2930,7 @@ function getCmdkItems(query) {
     if (!q) {
       return true;
     }
-    const haystack = `${session.displayName ?? ""} ${session.label ?? ""} ${session.key ?? ""} ${
-      session.kind ?? ""
-    } ${session.agentId ?? ""}`.toLowerCase();
-    return haystack.includes(q);
+    return sessionSearchText(session).includes(q);
   };
 
   const taskMatches = (task) => {
@@ -2847,8 +2949,8 @@ function getCmdkItems(query) {
     items.push({
       kind: "session",
       id: session.key,
-      title: session.displayName || session.label || session.key,
-      meta: `${session.kind} · ${session.agentId}`,
+      title: formatSessionTitle(session) || session.displayName || session.label || session.key,
+      meta: formatSessionMeta(session),
       run: () => {
         state.focusedTaskId = null;
         updateActiveSessionCard();

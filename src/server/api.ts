@@ -3,6 +3,7 @@ import path from "node:path";
 import type { TimelineEvent } from "../ingest/session-transcript.js";
 import { parseSessionTranscript } from "../ingest/session-transcript.js";
 import { listSessions, type SessionIndexEntry } from "../ingest/session-store.js";
+import { resolveAgentIdFromSessionKey } from "../ingest/session-key-info.js";
 import { loadSubagentRuns } from "../ingest/subagents.js";
 import { capturedEventsToTimeline, loadCapturedAgentEvents } from "../ingest/agent-events.js";
 import { resolveOpenClawStateDir } from "../paths.js";
@@ -20,14 +21,6 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value as Record<string, unknown>;
 }
 
-function extractAgentIdFromSessionKey(sessionKey: string): string | undefined {
-  const parts = sessionKey.split(":");
-  if (parts.length >= 2 && parts[0] === "agent") {
-    return parts[1];
-  }
-  return undefined;
-}
-
 function resolveExcludedAgentIds(stateDir: string): Set<string> {
   const config = loadConfig({ stateDir });
   const excluded = new Set(config.excludeAgentIds.map((id) => id.toLowerCase()));
@@ -39,11 +32,11 @@ function isExcludedSessionEntry(entry: SessionIndexEntry, excluded: Set<string>)
   if (excluded.has(entry.agentId.toLowerCase())) {
     return true;
   }
-  const keyAgent = extractAgentIdFromSessionKey(entry.key);
+  const keyAgent = resolveAgentIdFromSessionKey(entry.key);
   if (keyAgent && excluded.has(keyAgent.toLowerCase())) {
     return true;
   }
-  const spawnedByAgent = entry.spawnedBy ? extractAgentIdFromSessionKey(entry.spawnedBy) : undefined;
+  const spawnedByAgent = entry.spawnedBy ? resolveAgentIdFromSessionKey(entry.spawnedBy) : undefined;
   if (spawnedByAgent && excluded.has(spawnedByAgent.toLowerCase())) {
     return true;
   }
@@ -61,7 +54,7 @@ function filterSessionsByAgent(
 }
 
 function isExcludedSessionKey(sessionKey: string, excluded: Set<string>): boolean {
-  const agentId = extractAgentIdFromSessionKey(sessionKey);
+  const agentId = resolveAgentIdFromSessionKey(sessionKey);
   if (!agentId) {
     return false;
   }
@@ -429,7 +422,7 @@ export async function buildTimeline(params: {
   const sessionFileOverrides = new Map<string, string>();
   const sessionIdOverrides = new Map<string, string>();
   sessionHints.forEach((hint, sessionKey) => {
-    const agentId = extractAgentIdFromSessionKey(sessionKey) ?? session.agentId;
+    const agentId = resolveAgentIdFromSessionKey(sessionKey) ?? session.agentId;
     let sessionFile = hint.transcriptPath && fs.existsSync(hint.transcriptPath) ? hint.transcriptPath : undefined;
     const sessionId = hint.sessionId;
     if (!sessionFile && sessionId) {

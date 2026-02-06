@@ -7,16 +7,33 @@ import {
   resolveOpenClawStateDir,
   resolveSessionStorePath,
 } from "../paths.js";
+import { buildSessionKeyInfo, type SessionKeyInfo } from "./session-key-info.js";
 
 export type SessionEntry = {
   sessionId: string;
   updatedAt?: number;
   sessionFile?: string;
   spawnedBy?: string;
+  systemSent?: boolean;
+  abortedLastRun?: boolean;
+  chatType?: string;
   label?: string;
   displayName?: string;
   channel?: string;
   groupId?: string;
+  subject?: string;
+  groupChannel?: string;
+  space?: string;
+  origin?: {
+    label?: string;
+    provider?: string;
+    surface?: string;
+    chatType?: string;
+    from?: string;
+    to?: string;
+    accountId?: string;
+    threadId?: string | number;
+  };
   model?: string;
   contextTokens?: number;
   totalTokens?: number;
@@ -25,6 +42,7 @@ export type SessionEntry = {
   lastChannel?: string;
   lastTo?: string;
   lastAccountId?: string;
+  lastThreadId?: string | number;
 };
 
 export type SessionIndexEntry = {
@@ -38,6 +56,7 @@ export type SessionIndexEntry = {
   spawnedBy?: string;
   channel?: string;
   kind: string;
+  keyInfo?: SessionKeyInfo;
 };
 
 export function listAgentIds(stateDir = resolveOpenClawStateDir()): string[] {
@@ -81,6 +100,9 @@ function classifySessionKind(key: string): string {
   if (normalized.includes(":node:")) {
     return "node";
   }
+  if (normalized.includes(":acp:")) {
+    return "acp";
+  }
   if (normalized.includes(":dm:") || normalized.includes(":group:") || normalized.includes(":channel:")) {
     return "channel";
   }
@@ -103,6 +125,7 @@ export function listSessions(stateDir = resolveOpenClawStateDir()): SessionIndex
       const sessionFile = entry.sessionFile
         ? entry.sessionFile
         : path.join(resolveAgentSessionsDir(agentId, stateDir), `${sessionId}.jsonl`);
+      const keyInfo = buildSessionKeyInfo({ key, entry });
       sessions.push({
         agentId,
         key,
@@ -113,7 +136,8 @@ export function listSessions(stateDir = resolveOpenClawStateDir()): SessionIndex
         displayName: entry.displayName,
         spawnedBy: entry.spawnedBy,
         channel: entry.channel,
-        kind: classifySessionKind(key),
+        kind: keyInfo.kind !== "unknown" ? keyInfo.kind : classifySessionKind(key),
+        keyInfo,
       });
     }
   }
