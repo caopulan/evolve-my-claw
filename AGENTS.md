@@ -27,6 +27,13 @@ git clone https://github.com/openclaw/openclaw.git openclaw
 git clone https://github.com/openclaw/openclaw.git "${TMPDIR:-/tmp}/openclaw"
 ```
 
+- Alternatively, keep the clone inside this repo (gitignored):
+
+```bash
+mkdir -p .tmp
+git clone https://github.com/openclaw/openclaw.git .tmp/openclaw
+```
+
 - Treat the OpenClaw clone as read-only unless explicitly requested to modify OpenClaw itself.
 
 ## GitHub Description
