@@ -20,6 +20,7 @@ const state = {
     "subagent_run",
     "subagent_result",
     "compaction",
+    "branch_summary",
     "agent_event",
     "model_change",
     "thinking_level_change",
@@ -29,6 +30,8 @@ const state = {
   selectedEventId: null,
   search: "",
   expandedEventIds: new Set(),
+  sessionSearch: "",
+  sidebarHidden: false,
   evolutionReports: [],
   evolutionRunning: false,
   evolutionDimensions: new Set(["per_task_tool_quality", "cross_task_patterns"]),
@@ -39,11 +42,17 @@ const state = {
   appliedChanges: new Set(),
 };
 
+const appEl = document.querySelector(".app");
 const sessionsEl = document.getElementById("sessions");
+const sidebarHintEl = document.getElementById("sidebar-hint");
+const sessionSearchEl = document.getElementById("session-search");
 const timelineEl = document.getElementById("timeline");
 const sessionTitleEl = document.getElementById("session-title");
 const sessionSubtitleEl = document.getElementById("session-subtitle");
 const searchEl = document.getElementById("search");
+const timelineCountEl = document.getElementById("timeline-count");
+const clearFocusEl = document.getElementById("clear-focus");
+const taskStripEl = document.getElementById("task-strip");
 const detailTitleEl = document.getElementById("detail-title");
 const detailSubtitleEl = document.getElementById("detail-subtitle");
 const detailBodyEl = document.getElementById("detail-body");
@@ -56,12 +65,42 @@ const viewIndicatorLabelEl = document.querySelector(".view-indicator-label");
 const taskViewEl = document.getElementById("task-view");
 const evolutionViewEl = document.getElementById("evolution-view");
 const mainEl = document.querySelector(".main");
+const sidebarToggleEl = document.getElementById("sidebar-toggle");
+const cmdkOpenEl = document.getElementById("cmdk-open");
+const helpOpenEl = document.getElementById("help-open");
+const cmdkDialogEl = document.getElementById("cmdk");
+const cmdkInputEl = document.getElementById("cmdk-input");
+const cmdkResultsEl = document.getElementById("cmdk-results");
+const helpDialogEl = document.getElementById("help");
+const toastEl = document.getElementById("toast");
 
 const SELECTED_TASKS_KEY = "emc_selected_tasks";
+const FILTERS_KEY = "emc_timeline_filters";
+const SIDEBAR_HIDDEN_KEY = "emc_sidebar_hidden";
 const EVOLUTION_DIMENSIONS_KEY = "emc_evolution_dimensions";
 const EVOLUTION_CHANGE_TARGETS_KEY = "emc_evolution_change_targets";
 const EVOLUTION_APPLIED_CHANGES_KEY = "emc_evolution_applied_changes";
 const EVOLUTION_USE_SEARCH_KEY = "emc_evolution_use_search";
+
+const DEFAULT_FILTERS = [
+  "user_message",
+  "assistant_message",
+  "tool",
+  "subagent_run",
+  "subagent_result",
+  "compaction",
+  "branch_summary",
+  "agent_event",
+  "model_change",
+  "thinking_level_change",
+  "session_info",
+];
+
+const cmdkState = {
+  query: "",
+  items: [],
+  activeIndex: 0,
+};
 
 function formatTime(ts) {
   const date = new Date(ts);
@@ -73,11 +112,92 @@ function formatTaskTime(ts) {
   return date.toLocaleString();
 }
 
+function formatClockTime(ts) {
+  const date = new Date(ts);
+  try {
+    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return date.toLocaleTimeString();
+  }
+}
+
 function createEmptyState(message) {
   const empty = document.createElement("div");
   empty.className = "empty-state";
   empty.textContent = message;
   return empty;
+}
+
+function isTypingTarget(target) {
+  if (!target || !(target instanceof HTMLElement)) {
+    return false;
+  }
+  const tag = target.tagName.toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") {
+    return true;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  return false;
+}
+
+function isInteractiveElement(el) {
+  if (!el || !(el instanceof HTMLElement)) {
+    return false;
+  }
+  const tag = el.tagName.toLowerCase();
+  return (
+    tag === "input" ||
+    tag === "textarea" ||
+    tag === "select" ||
+    tag === "button" ||
+    tag === "a" ||
+    tag === "summary"
+  );
+}
+
+function showToast(message) {
+  if (!toastEl) {
+    return;
+  }
+  const item = document.createElement("div");
+  item.className = "toast-item";
+  item.textContent = message;
+  toastEl.appendChild(item);
+
+  window.setTimeout(() => {
+    item.style.animation = "toastOut 0.22s ease-in both";
+    window.setTimeout(() => item.remove(), 240);
+  }, 2400);
+}
+
+async function copyToClipboard(text) {
+  const value = String(text ?? "");
+  if (!value) {
+    return false;
+  }
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    // Fallback for non-secure contexts.
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.style.position = "fixed";
+      textarea.style.left = "-1000px";
+      textarea.style.top = "-1000px";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand("copy");
+      textarea.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
 }
 
 function escapeHtml(text) {
@@ -287,6 +407,30 @@ function getTaskRange(task) {
   return { start, end: end ?? start };
 }
 
+function findTaskForEvent(event) {
+  if (!event || typeof event.ts !== "number") {
+    return null;
+  }
+  if (!state.tasksLoaded) {
+    return null;
+  }
+  const sessionKey = typeof event.sessionKey === "string" ? event.sessionKey : "";
+  if (!sessionKey) {
+    return null;
+  }
+  const tasks = state.tasksBySession.get(sessionKey) || [];
+  for (const task of tasks) {
+    const range = getTaskRange(task);
+    if (!range) {
+      continue;
+    }
+    if (event.ts >= range.start && event.ts <= range.end) {
+      return task;
+    }
+  }
+  return null;
+}
+
 function getSelectedTasks() {
   const selected = [];
   state.selectedTaskIds.forEach((taskId) => {
@@ -339,6 +483,7 @@ function focusTask(task) {
   state.activeTaskId = task.taskId;
   state.focusedTaskId = task.taskId;
   updateActiveSessionCard();
+  renderSessions();
   if (task.sessionKey && task.sessionKey !== state.activeSessionKey) {
     loadTimeline(task.sessionKey);
   } else {
@@ -346,6 +491,18 @@ function focusTask(task) {
     renderDetailPanel();
   }
   renderEvolutionView();
+}
+
+function clearFocusedTask() {
+  if (!state.focusedTaskId) {
+    return;
+  }
+  state.focusedTaskId = null;
+  state.activeTaskId = null;
+  renderSessions();
+  updateActiveSessionCard();
+  renderTimeline();
+  renderDetailPanel();
 }
 
 function setMainView(view) {
@@ -381,6 +538,29 @@ function setMainView(view) {
     renderTimeline();
     renderDetailPanel();
   }
+}
+
+function updateSidebarVisibility() {
+  if (!appEl) {
+    return;
+  }
+  appEl.classList.toggle("is-sidebar-hidden", state.sidebarHidden);
+  if (sidebarToggleEl) {
+    const label = sidebarToggleEl.querySelector(".toolbar-button-label");
+    if (label) {
+      label.textContent = state.sidebarHidden ? "Show sessions" : "Hide sessions";
+    }
+  }
+}
+
+function setSidebarHidden(hidden) {
+  state.sidebarHidden = Boolean(hidden);
+  persistBoolean(SIDEBAR_HIDDEN_KEY, state.sidebarHidden);
+  updateSidebarVisibility();
+}
+
+function toggleSidebarHidden() {
+  setSidebarHidden(!state.sidebarHidden);
 }
 
 function loadSelectedTaskIds() {
@@ -477,6 +657,8 @@ function persistStringSet(key, value) {
 }
 
 state.selectedTaskIds = loadSelectedTaskIds();
+state.filters = loadStringSet(FILTERS_KEY, DEFAULT_FILTERS);
+state.sidebarHidden = loadBoolean(SIDEBAR_HIDDEN_KEY, false);
 state.evolutionDimensions = loadStringSet(EVOLUTION_DIMENSIONS_KEY, [
   "per_task_tool_quality",
   "cross_task_patterns",
@@ -678,6 +860,21 @@ function updateTimelineSelection(previousId, nextId) {
   }
 }
 
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+}
+
+function scrollEventIntoView(eventId) {
+  if (!timelineEl || !eventId) {
+    return;
+  }
+  const el = timelineEl.querySelector(`[data-event-id="${toEventDataId(eventId)}"]`);
+  if (!el) {
+    return;
+  }
+  el.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+}
+
 function selectEvent(eventId) {
   if (!eventId || state.selectedEventId === eventId) {
     return;
@@ -686,6 +883,7 @@ function selectEvent(eventId) {
   state.selectedEventId = eventId;
   if (state.mainView === "task") {
     updateTimelineSelection(previousId, eventId);
+    scrollEventIntoView(eventId);
     renderDetailPanel();
   }
 }
@@ -693,14 +891,58 @@ function selectEvent(eventId) {
 function renderSessions() {
   sessionsEl.innerHTML = "";
 
-  if (!state.sessions.length) {
-    sessionsEl.appendChild(createEmptyState("No sessions found"));
+  const query = state.sessionSearch.trim().toLowerCase();
+  const matchesSession = (session) => {
+    if (!query) {
+      return true;
+    }
+    const haystack = `${session.displayName ?? ""} ${session.label ?? ""} ${session.key ?? ""} ${
+      session.kind ?? ""
+    } ${session.agentId ?? ""}`.toLowerCase();
+    return haystack.includes(query);
+  };
+  const matchesTask = (task) => {
+    if (!query) {
+      return true;
+    }
+    const title = taskDisplayTitle(task);
+    const messageId = extractMessageId(task.userMessage || "");
+    const haystack = `${title} ${messageId} ${task.taskId ?? ""} ${task.sessionKey ?? ""}`.toLowerCase();
+    return haystack.includes(query);
+  };
+
+  const sessionsToRender = query
+    ? state.sessions.filter((session) => {
+        if (matchesSession(session)) {
+          return true;
+        }
+        const tasksForSession = state.tasksBySession.get(session.key) || [];
+        return tasksForSession.some(matchesTask);
+      })
+    : state.sessions;
+
+  if (sidebarHintEl) {
+    const selectedCount = state.selectedTaskIds.size;
+    const hintParts = [
+      `${sessionsToRender.length} session${sessionsToRender.length === 1 ? "" : "s"}`,
+      `${selectedCount} task${selectedCount === 1 ? "" : "s"} selected`,
+    ];
+    if (query) {
+      hintParts.push(`query: "${query}"`);
+    }
+    sidebarHintEl.textContent = hintParts.join(" · ");
+  }
+
+  if (!sessionsToRender.length) {
+    sessionsEl.appendChild(createEmptyState(query ? "No sessions match this search." : "No sessions found"));
     return;
   }
 
-  state.sessions.forEach((session, index) => {
+  sessionsToRender.forEach((session, index) => {
     const tree = document.createElement("div");
-    tree.className = "session-tree" + (state.expandedSessions.has(session.key) ? " expanded" : "");
+    const forceExpanded = Boolean(query);
+    const isExpanded = forceExpanded || state.expandedSessions.has(session.key);
+    tree.className = "session-tree" + (isExpanded ? " expanded" : "");
     tree.setAttribute("data-session-key", session.key);
 
     const card = document.createElement("div");
@@ -722,13 +964,18 @@ function renderSessions() {
     title.textContent = session.displayName || session.label || session.key;
     const meta = document.createElement("div");
     meta.className = "session-meta";
-    meta.textContent = `${session.kind} · ${session.agentId}`;
+    const tasksCount = state.tasksLoaded ? (state.tasksBySession.get(session.key) || []).length : null;
+    meta.textContent = `${session.kind} · ${session.agentId}${
+      tasksCount != null ? ` · ${tasksCount} task${tasksCount === 1 ? "" : "s"}` : ""
+    }`;
     textWrap.appendChild(title);
     textWrap.appendChild(meta);
     card.appendChild(toggle);
     card.appendChild(textWrap);
     card.addEventListener("click", () => {
       state.focusedTaskId = null;
+      state.activeTaskId = null;
+      renderSessions();
       updateActiveSessionCard();
       loadTimeline(session.key);
     });
@@ -736,6 +983,11 @@ function renderSessions() {
     const taskList = document.createElement("div");
     taskList.className = "task-list";
     const tasksForSession = state.tasksBySession.get(session.key) || [];
+    const tasksToShow = query
+      ? matchesSession(session)
+        ? tasksForSession
+        : tasksForSession.filter(matchesTask)
+      : tasksForSession;
 
     if (!state.tasksLoaded) {
       const empty = document.createElement("div");
@@ -747,8 +999,27 @@ function renderSessions() {
       empty.className = "task-empty";
       empty.textContent = "No tasks found. Run emc parse to generate tasks.";
       taskList.appendChild(empty);
+    } else if (tasksToShow.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "task-empty";
+      empty.textContent = "No tasks match this search.";
+      taskList.appendChild(empty);
     } else {
-      tasksForSession.forEach((task) => {
+      const header = document.createElement("div");
+      header.className = "task-list-header";
+      const headerTitle = document.createElement("div");
+      headerTitle.textContent = "Tasks";
+      const headerCount = document.createElement("div");
+      headerCount.className = "task-count";
+      const selectedInSession = tasksForSession.filter((task) => state.selectedTaskIds.has(task.taskId)).length;
+      headerCount.textContent = query
+        ? `${tasksToShow.length}/${tasksForSession.length} shown · ${selectedInSession} selected`
+        : `${selectedInSession} selected`;
+      header.appendChild(headerTitle);
+      header.appendChild(headerCount);
+      taskList.appendChild(header);
+
+      tasksToShow.forEach((task) => {
         const item = document.createElement("div");
         item.className = "task-item" + (state.focusedTaskId === task.taskId ? " focused" : "");
         item.setAttribute("role", "button");
@@ -787,6 +1058,7 @@ function renderSessions() {
             }
           }
           persistSelectedTaskIds();
+          renderSessions();
           updateActiveSessionCard();
           renderDetailPanel();
           renderEvolutionView();
@@ -811,6 +1083,23 @@ function renderSessions() {
         }
         item.appendChild(checkbox);
         item.appendChild(info);
+
+        const analysisRecord = state.analysesByTask.get(task.taskId);
+        if (analysisRecord) {
+          const status = analysisRecord.parseError
+            ? "failed"
+            : analysisRecord.analysis
+              ? "success"
+              : analysisRecord.rawResponse
+                ? "partial"
+                : "unknown";
+          const badge = document.createElement("span");
+          badge.className = `task-badge status-${status}`;
+          badge.setAttribute("title", `Analysis: ${status}`);
+          badge.setAttribute("aria-label", `Analysis: ${status}`);
+          item.appendChild(badge);
+        }
+
         taskList.appendChild(item);
       });
     }
@@ -846,6 +1135,46 @@ function toggleSessionExpanded(sessionKey) {
   setSessionExpanded(sessionKey, !expanded);
 }
 
+function renderTaskStrip() {
+  if (!taskStripEl) {
+    return;
+  }
+  taskStripEl.innerHTML = "";
+  if (!state.activeSessionKey || !state.tasksLoaded) {
+    taskStripEl.hidden = true;
+    return;
+  }
+  const tasks = state.tasksBySession.get(state.activeSessionKey) || [];
+  if (!tasks.length) {
+    taskStripEl.hidden = true;
+    return;
+  }
+  taskStripEl.hidden = false;
+
+  tasks.forEach((task) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    const isFocused = state.focusedTaskId === task.taskId;
+    const isSelected = state.selectedTaskIds.has(task.taskId);
+    chip.className =
+      "task-chip" + (isFocused ? " active" : "") + (isSelected ? " selected" : "");
+    chip.addEventListener("click", () => focusTask(task));
+
+    const title = document.createElement("div");
+    title.className = "task-chip-title";
+    title.textContent = taskDisplayTitle(task, 64) || task.taskId || "Task";
+
+    const meta = document.createElement("div");
+    meta.className = "task-chip-meta";
+    const toolCount = Array.isArray(task.toolCalls) ? task.toolCalls.length : 0;
+    meta.textContent = `${formatClockTime(task.startTs)} · ${toolCount} tool${toolCount === 1 ? "" : "s"}`;
+
+    chip.appendChild(title);
+    chip.appendChild(meta);
+    taskStripEl.appendChild(chip);
+  });
+}
+
 function renderDetailPanel() {
   if (state.mainView !== "task") {
     return;
@@ -863,11 +1192,192 @@ function renderDetailPanel() {
   setMarkdown(detailTitleEl, event.summary || "(no summary)");
   detailSubtitleEl.textContent = `${event.kind.replace(/_/g, " ")} · ${formatTime(event.ts)}`;
 
+  const actions = document.createElement("div");
+  actions.className = "detail-actions";
+
+  const makeAction = (label, getText, successMessage) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "detail-action";
+    button.textContent = label;
+    button.addEventListener("click", async () => {
+      const text = getText();
+      const ok = await copyToClipboard(text);
+      showToast(ok ? successMessage : "Copy failed.");
+    });
+    return button;
+  };
+
+  actions.appendChild(
+    makeAction(
+      "Copy text",
+      () => {
+        const details = event.details ?? {};
+        if (details && typeof details.text === "string" && details.text.trim()) {
+          return details.text;
+        }
+        return event.summary || "";
+      },
+      "Copied text.",
+    ),
+  );
+  actions.appendChild(
+    makeAction(
+      "Copy details",
+      () => JSON.stringify(event.details ?? {}, null, 2),
+      "Copied details JSON.",
+    ),
+  );
+  actions.appendChild(
+    makeAction(
+      "Copy event id",
+      () => String(event.id || ""),
+      "Copied event id.",
+    ),
+  );
+  detailBodyEl.appendChild(actions);
+
   if (!state.filteredEventIds.has(getEventKey(event))) {
     const note = document.createElement("div");
     note.className = "detail-note";
     note.textContent = "Selected event is hidden by current filters.";
     detailBodyEl.appendChild(note);
+  }
+
+  const task = findTaskForEvent(event);
+  if (task) {
+    const taskSection = document.createElement("div");
+    taskSection.className = "detail-section";
+    const taskTitle = document.createElement("div");
+    taskTitle.className = "detail-section-title";
+    taskTitle.textContent = "Task context";
+    taskSection.appendChild(taskTitle);
+
+    const taskHeader = document.createElement("div");
+    taskHeader.className = "detail-task-header";
+    const taskName = document.createElement("div");
+    taskName.className = "detail-task-title";
+    taskName.textContent = taskDisplayTitle(task, 120) || task.taskId || "Task";
+    const taskActions = document.createElement("div");
+    taskActions.className = "detail-task-actions";
+
+    const focusBtn = document.createElement("button");
+    focusBtn.type = "button";
+    focusBtn.className = "detail-mini";
+    focusBtn.textContent = "Focus range";
+    focusBtn.addEventListener("click", () => focusTask(task));
+    taskActions.appendChild(focusBtn);
+
+    const selectBtn = document.createElement("button");
+    selectBtn.type = "button";
+    selectBtn.className = "detail-mini";
+    const updateSelectBtn = () => {
+      const selected = state.selectedTaskIds.has(task.taskId);
+      selectBtn.textContent = selected ? "Selected" : "Select for evolution";
+      selectBtn.setAttribute("data-selected", selected ? "true" : "false");
+    };
+    updateSelectBtn();
+    selectBtn.addEventListener("click", () => {
+      const selected = state.selectedTaskIds.has(task.taskId);
+      if (selected) {
+        state.selectedTaskIds.delete(task.taskId);
+      } else {
+        state.selectedTaskIds.add(task.taskId);
+      }
+      persistSelectedTaskIds();
+      renderSessions();
+      renderEvolutionView();
+      updateSelectBtn();
+    });
+    taskActions.appendChild(selectBtn);
+
+    taskHeader.appendChild(taskName);
+    taskHeader.appendChild(taskActions);
+    taskSection.appendChild(taskHeader);
+
+    const taskMeta = document.createElement("div");
+    taskMeta.className = "detail-task-meta";
+    const messageId = extractMessageId(task.userMessage || "");
+    const toolCount = Array.isArray(task.toolCalls) ? task.toolCalls.length : 0;
+    const range = getTaskRange(task);
+    const duration =
+      range && typeof range.end === "number"
+        ? `${((range.end - range.start) / 1000).toFixed(2)}s`
+        : "-";
+    taskMeta.textContent = `${formatTaskTime(task.startTs)}${
+      messageId ? ` · ${messageId}` : ""
+    } · ${toolCount} tool${toolCount === 1 ? "" : "s"} · ${duration}`;
+    taskSection.appendChild(taskMeta);
+
+    const analysisRecord = state.analysesByTask.get(task.taskId);
+    if (analysisRecord) {
+      const status = analysisRecord.parseError
+        ? "failed"
+        : analysisRecord.analysis
+          ? "success"
+          : analysisRecord.rawResponse
+            ? "partial"
+            : "unknown";
+
+      const analysisDetails = document.createElement("details");
+      analysisDetails.className = "detail-disclosure";
+
+      const analysisSummary = document.createElement("summary");
+      analysisSummary.className = "detail-disclosure-summary";
+      const analysisLabel = document.createElement("span");
+      analysisLabel.textContent = "Task analysis";
+      const analysisPill = document.createElement("span");
+      analysisPill.className = `analysis-pill status-${status}`;
+      analysisPill.textContent = status;
+      analysisSummary.appendChild(analysisLabel);
+      analysisSummary.appendChild(analysisPill);
+      analysisDetails.appendChild(analysisSummary);
+
+      const analysisBody = document.createElement("div");
+      analysisBody.className = "detail-disclosure-body";
+
+      if (analysisRecord.parseError) {
+        const error = document.createElement("div");
+        error.className = "analysis-error";
+        error.textContent = analysisRecord.parseError;
+        analysisBody.appendChild(error);
+      }
+
+      if (Array.isArray(analysisRecord.toolSummary) && analysisRecord.toolSummary.length > 0) {
+        const list = document.createElement("div");
+        list.className = "summary-list";
+        analysisRecord.toolSummary.forEach((entry) => {
+          const row = document.createElement("div");
+          row.className = "summary-row";
+          const label = document.createElement("div");
+          label.className = "summary-label";
+          label.textContent = entry.tool;
+          const value = document.createElement("div");
+          value.className = "summary-value";
+          value.textContent = `${entry.count}${entry.errors ? ` (err:${entry.errors})` : ""}`;
+          row.appendChild(label);
+          row.appendChild(value);
+          list.appendChild(row);
+        });
+        analysisBody.appendChild(list);
+      }
+
+      if (analysisRecord.analysis) {
+        const payload = document.createElement("div");
+        payload.className = "detail-section";
+        const payloadTitle = document.createElement("div");
+        payloadTitle.className = "detail-section-title";
+        payloadTitle.textContent = "Analysis JSON";
+        payload.appendChild(payloadTitle);
+        payload.appendChild(createJsonTree(analysisRecord.analysis));
+        analysisBody.appendChild(payload);
+      }
+
+      analysisDetails.appendChild(analysisBody);
+      taskSection.appendChild(analysisDetails);
+    }
+
+    detailBodyEl.appendChild(taskSection);
   }
 
   const meta = document.createElement("dl");
@@ -1214,6 +1724,75 @@ function findFirstEventId(events) {
   return null;
 }
 
+function collectEventChips(event, hasChildren) {
+  const chips = [];
+  const details = event?.details ?? {};
+
+  if (event.durationMs != null) {
+    chips.push({ label: `${(event.durationMs / 1000).toFixed(2)}s`, tone: "muted" });
+  }
+
+  if (hasChildren) {
+    chips.push({
+      label: `${event.children.length} child${event.children.length === 1 ? "" : "ren"}`,
+      tone: "muted",
+    });
+  }
+
+  if (event.kind === "tool") {
+    const isError = Boolean(details && typeof details === "object" && details.isError);
+    if (isError) {
+      chips.push({ label: "error", tone: "danger" });
+    }
+    if (typeof event.toolName === "string" && event.toolName) {
+      chips.push({ label: event.toolName, tone: "accent" });
+    }
+  }
+
+  if (event.kind === "assistant_message") {
+    const hasThinking =
+      details &&
+      typeof details === "object" &&
+      Array.isArray(details.thinking) &&
+      details.thinking.length > 0;
+    if (hasThinking) {
+      chips.push({ label: "thinking", tone: "info" });
+    }
+  }
+
+  if (event.kind === "subagent_run") {
+    const outcomeStatus =
+      details &&
+      typeof details === "object" &&
+      details.outcome &&
+      typeof details.outcome === "object" &&
+      typeof details.outcome.status === "string"
+        ? details.outcome.status
+        : "";
+    if (outcomeStatus) {
+      const tone =
+        outcomeStatus.toLowerCase() === "success"
+          ? "success"
+          : outcomeStatus.toLowerCase() === "failed"
+            ? "danger"
+            : "muted";
+      chips.push({ label: outcomeStatus, tone });
+    }
+  }
+
+  if (event.kind === "agent_event") {
+    const stream =
+      details && typeof details === "object" && typeof details.stream === "string"
+        ? details.stream
+        : "";
+    if (stream) {
+      chips.push({ label: stream, tone: "info" });
+    }
+  }
+
+  return chips;
+}
+
 function renderEventNode(event, indexRef, depth = 0) {
   const eventId = getEventKey(event);
   const wrapper = document.createElement("div");
@@ -1250,11 +1829,17 @@ function renderEventNode(event, indexRef, depth = 0) {
   card.appendChild(header);
   card.appendChild(summary);
 
-  if (event.durationMs != null) {
-    const duration = document.createElement("div");
-    duration.className = "event-details";
-    duration.textContent = `duration: ${(event.durationMs / 1000).toFixed(2)}s`;
-    card.appendChild(duration);
+  const chips = collectEventChips(event, hasChildren);
+  if (chips.length > 0) {
+    const meta = document.createElement("div");
+    meta.className = "event-meta";
+    chips.forEach((chip) => {
+      const span = document.createElement("span");
+      span.className = `event-chip tone-${chip.tone || "muted"}`;
+      span.textContent = chip.label;
+      meta.appendChild(span);
+    });
+    card.appendChild(meta);
   }
 
   card.addEventListener("click", () => selectEvent(eventId));
@@ -1312,8 +1897,15 @@ function renderTimeline() {
   if (state.mainView !== "task") {
     return;
   }
+  renderTaskStrip();
   timelineEl.innerHTML = "";
   if (!state.activeSessionKey) {
+    if (timelineCountEl) {
+      timelineCountEl.textContent = "";
+    }
+    if (clearFocusEl) {
+      clearFocusEl.hidden = true;
+    }
     timelineEl.appendChild(createEmptyState("Select a session to load its timeline"));
     renderDetailPanel();
     return;
@@ -1327,6 +1919,10 @@ function renderTimeline() {
       ? getTaskRange(focusedTask)
       : null;
 
+  if (clearFocusEl) {
+    clearFocusEl.hidden = !focusRange;
+  }
+
   const filteredResult = filterEventTree(state.events, {
     filters: state.filters,
     search,
@@ -1336,8 +1932,17 @@ function renderTimeline() {
   state.filteredEventIds = filteredResult.ids;
 
   const firstVisibleId = findFirstEventId(filteredResult.events);
+  const previousSelected = state.selectedEventId;
   if (firstVisibleId && !state.filteredEventIds.has(state.selectedEventId)) {
     state.selectedEventId = firstVisibleId;
+  }
+
+  if (timelineCountEl) {
+    const total = state.eventIndex?.size ?? 0;
+    const visible = state.filteredEventIds.size;
+    const focusFlag = focusRange ? " · focus:on" : "";
+    const searchFlag = search ? " · search:on" : "";
+    timelineCountEl.textContent = `${visible}/${total} events${focusFlag}${searchFlag}`;
   }
 
   if (!filteredResult.events.length) {
@@ -1357,6 +1962,9 @@ function renderTimeline() {
     timelineEl.appendChild(renderEventNode(event, indexRef));
   });
 
+  if (state.selectedEventId && state.selectedEventId !== previousSelected) {
+    scrollEventIntoView(state.selectedEventId);
+  }
   renderDetailPanel();
 }
 
@@ -1396,10 +2004,12 @@ async function loadTasks() {
     updateActiveSessionCard();
     renderDetailPanel();
     renderEvolutionView();
+    renderTimeline();
   } catch {
     state.tasksLoaded = true;
     renderSessions();
     renderEvolutionView();
+    renderTimeline();
   }
 }
 
@@ -1416,9 +2026,13 @@ async function loadAnalyses() {
     });
     state.analysesByTask = byTask;
     state.analysesLoaded = true;
+    renderSessions();
+    renderDetailPanel();
     renderEvolutionView();
   } catch {
     state.analysesLoaded = true;
+    renderSessions();
+    renderDetailPanel();
     renderEvolutionView();
   }
 }
@@ -1526,7 +2140,55 @@ async function loadTimeline(sessionKey) {
   renderTimeline();
 }
 
+function getAllFilterKindsFromDom() {
+  return Array.from(document.querySelectorAll(".filters input[type=checkbox]"))
+    .map((el) => el.getAttribute("data-kind"))
+    .filter((value) => typeof value === "string" && value.trim().length > 0);
+}
+
+function syncFilterCheckboxes() {
+  document.querySelectorAll(".filters input[type=checkbox]").forEach((input) => {
+    const kind = input.getAttribute("data-kind");
+    if (!kind) {
+      return;
+    }
+    input.checked = state.filters.has(kind);
+  });
+}
+
+function setFilters(nextFilters) {
+  state.filters = new Set(Array.from(nextFilters));
+  persistStringSet(FILTERS_KEY, state.filters);
+  syncFilterCheckboxes();
+  renderTimeline();
+}
+
+function runFilterAction(action) {
+  const allKinds = new Set(getAllFilterKindsFromDom());
+  if (action === "all") {
+    setFilters(allKinds);
+    return;
+  }
+  if (action === "none") {
+    setFilters([]);
+    return;
+  }
+  if (action === "messages") {
+    setFilters(
+      ["user_message", "assistant_message"].filter((kind) => allKinds.has(kind)),
+    );
+    return;
+  }
+  if (action === "tools") {
+    setFilters(
+      ["tool", "subagent_run", "subagent_result"].filter((kind) => allKinds.has(kind)),
+    );
+  }
+}
+
 function wireFilters() {
+  syncFilterCheckboxes();
+
   document.querySelectorAll(".filters input[type=checkbox]").forEach((input) => {
     input.addEventListener("change", (event) => {
       const target = event.target;
@@ -1539,9 +2201,247 @@ function wireFilters() {
       } else {
         state.filters.delete(kind);
       }
+      persistStringSet(FILTERS_KEY, state.filters);
       renderTimeline();
     });
   });
+
+  document.querySelectorAll("[data-filter-action]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const action = btn.getAttribute("data-filter-action");
+      if (!action) {
+        return;
+      }
+      runFilterAction(action);
+    });
+  });
+}
+
+function isOpenDialog(dialogEl) {
+  return Boolean(dialogEl && typeof dialogEl === "object" && dialogEl.open);
+}
+
+function closeDialog(dialogEl) {
+  if (!dialogEl || typeof dialogEl.close !== "function") {
+    return;
+  }
+  if (isOpenDialog(dialogEl)) {
+    dialogEl.close();
+  }
+}
+
+function openDialog(dialogEl) {
+  if (!dialogEl || typeof dialogEl.showModal !== "function") {
+    return false;
+  }
+  if (!isOpenDialog(dialogEl)) {
+    dialogEl.showModal();
+  }
+  return true;
+}
+
+function getCmdkItems(query) {
+  const q = query.trim().toLowerCase();
+  const items = [];
+
+  const addAction = (id, title, meta, run) => {
+    if (q && !`${title} ${meta ?? ""}`.toLowerCase().includes(q)) {
+      return;
+    }
+    items.push({ kind: "action", id, title, meta, run });
+  };
+
+  addAction("toggle_sidebar", "Toggle sessions sidebar", "UI", () => toggleSidebarHidden());
+  addAction("clear_focus", "Clear focused task range", "Timeline", () => clearFocusedTask());
+  addAction("clear_search", "Clear timeline search", "Timeline", () => {
+    state.search = "";
+    if (searchEl) {
+      searchEl.value = "";
+    }
+    renderTimeline();
+  });
+  addAction("reset_filters", "Reset timeline filters", "Timeline", () => setFilters(DEFAULT_FILTERS));
+  addAction("view_timeline", "Go to timeline view", "View", () => setMainView("task"));
+  addAction("view_evolution", "Go to evolution view", "View", () => setMainView("evolution"));
+
+  const sessionMatches = (session) => {
+    if (!q) {
+      return true;
+    }
+    const haystack = `${session.displayName ?? ""} ${session.label ?? ""} ${session.key ?? ""} ${
+      session.kind ?? ""
+    } ${session.agentId ?? ""}`.toLowerCase();
+    return haystack.includes(q);
+  };
+
+  const taskMatches = (task) => {
+    if (!q) {
+      return true;
+    }
+    const title = taskDisplayTitle(task);
+    const messageId = extractMessageId(task.userMessage || "");
+    const haystack = `${title} ${messageId} ${task.taskId ?? ""} ${task.sessionKey ?? ""}`.toLowerCase();
+    return haystack.includes(q);
+  };
+
+  const sessions = state.sessions.filter(sessionMatches);
+  const sessionLimit = q ? 10 : 6;
+  sessions.slice(0, sessionLimit).forEach((session) => {
+    items.push({
+      kind: "session",
+      id: session.key,
+      title: session.displayName || session.label || session.key,
+      meta: `${session.kind} · ${session.agentId}`,
+      run: () => {
+        state.focusedTaskId = null;
+        updateActiveSessionCard();
+        loadTimeline(session.key);
+      },
+    });
+  });
+
+  const taskPool = [];
+  if (state.tasksLoaded) {
+    if (state.activeSessionKey) {
+      const activeTasks = state.tasksBySession.get(state.activeSessionKey) || [];
+      taskPool.push(...activeTasks);
+    } else if (q) {
+      state.tasksBySession.forEach((list) => taskPool.push(...list));
+    }
+  }
+  const uniqueTasks = new Map(taskPool.map((task) => [task.taskId, task]));
+  const tasks = Array.from(uniqueTasks.values()).filter(taskMatches);
+  const taskLimit = q ? 14 : 8;
+  tasks.slice(0, taskLimit).forEach((task) => {
+    items.push({
+      kind: "task",
+      id: task.taskId,
+      title: taskDisplayTitle(task, 120) || task.taskId,
+      meta: `${task.sessionKey} · ${formatTaskTime(task.startTs)}`,
+      run: () => focusTask(task),
+    });
+  });
+
+  return items;
+}
+
+function renderCmdk() {
+  if (!cmdkResultsEl) {
+    return;
+  }
+  cmdkResultsEl.innerHTML = "";
+  cmdkState.items = getCmdkItems(cmdkState.query);
+  if (cmdkState.activeIndex >= cmdkState.items.length) {
+    cmdkState.activeIndex = Math.max(0, cmdkState.items.length - 1);
+  }
+
+  if (cmdkState.items.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "cmdk-empty";
+    empty.textContent = "No results.";
+    cmdkResultsEl.appendChild(empty);
+    return;
+  }
+
+  cmdkState.items.forEach((item, idx) => {
+    const row = document.createElement("div");
+    row.className = "cmdk-item";
+    row.setAttribute("role", "option");
+    row.setAttribute("tabindex", "-1");
+    row.setAttribute("aria-selected", idx === cmdkState.activeIndex ? "true" : "false");
+    row.addEventListener("click", () => runCmdkItem(idx));
+
+    const title = document.createElement("div");
+    title.className = "cmdk-title";
+    title.textContent = item.title;
+    const meta = document.createElement("div");
+    meta.className = "cmdk-meta";
+    meta.textContent = item.meta || item.kind;
+
+    row.appendChild(title);
+    row.appendChild(meta);
+    cmdkResultsEl.appendChild(row);
+  });
+}
+
+function runCmdkItem(index) {
+  const item = cmdkState.items[index];
+  if (!item) {
+    return;
+  }
+  closeDialog(cmdkDialogEl);
+  item.run();
+}
+
+function openCmdk() {
+  const ok = openDialog(cmdkDialogEl);
+  if (!ok) {
+    return;
+  }
+  cmdkState.query = "";
+  cmdkState.activeIndex = 0;
+  if (cmdkInputEl) {
+    cmdkInputEl.value = "";
+    cmdkInputEl.focus();
+    cmdkInputEl.select();
+  }
+  renderCmdk();
+}
+
+function openHelp() {
+  openDialog(helpDialogEl);
+}
+
+function fromEventDataId(encoded) {
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
+}
+
+function getVisibleTimelineEventIds() {
+  if (!timelineEl) {
+    return [];
+  }
+  return Array.from(timelineEl.querySelectorAll(".event[data-event-id]"))
+    .filter((el) => el instanceof HTMLElement && el.offsetParent !== null)
+    .map((el) => fromEventDataId(el.getAttribute("data-event-id") || ""))
+    .filter(Boolean);
+}
+
+function moveTimelineSelection(delta) {
+  if (state.mainView !== "task") {
+    return;
+  }
+  const ids = getVisibleTimelineEventIds();
+  if (!ids.length) {
+    return;
+  }
+  const current = state.selectedEventId;
+  const idx = current ? ids.indexOf(current) : -1;
+  const nextIdx = Math.min(ids.length - 1, Math.max(0, (idx === -1 ? 0 : idx) + delta));
+  const nextId = ids[nextIdx];
+  if (nextId) {
+    selectEvent(nextId);
+  }
+}
+
+function toggleSelectedEventGroup() {
+  if (!timelineEl || !state.selectedEventId) {
+    return;
+  }
+  const card = timelineEl.querySelector(
+    `[data-event-id="${toEventDataId(state.selectedEventId)}"]`,
+  );
+  if (!card) {
+    return;
+  }
+  const group = card.closest("details.event-group");
+  if (!group) {
+    return;
+  }
+  group.open = !group.open;
 }
 
 searchEl.addEventListener("input", (event) => {
@@ -1559,6 +2459,148 @@ viewTabs.forEach((tab) => {
   });
 });
 
+if (sessionSearchEl) {
+  sessionSearchEl.addEventListener("input", (event) => {
+    const target = event.target;
+    state.sessionSearch = target.value || "";
+    renderSessions();
+  });
+}
+
+if (sidebarToggleEl) {
+  sidebarToggleEl.addEventListener("click", () => toggleSidebarHidden());
+}
+
+if (cmdkOpenEl) {
+  cmdkOpenEl.addEventListener("click", () => openCmdk());
+}
+
+if (helpOpenEl) {
+  helpOpenEl.addEventListener("click", () => openHelp());
+}
+
+if (clearFocusEl) {
+  clearFocusEl.addEventListener("click", () => clearFocusedTask());
+}
+
+if (cmdkInputEl) {
+  cmdkInputEl.addEventListener("input", (event) => {
+    const target = event.target;
+    cmdkState.query = target.value || "";
+    cmdkState.activeIndex = 0;
+    renderCmdk();
+  });
+
+  cmdkInputEl.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (cmdkState.items.length === 0) {
+        return;
+      }
+      cmdkState.activeIndex = Math.min(cmdkState.items.length - 1, cmdkState.activeIndex + 1);
+      renderCmdk();
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (cmdkState.items.length === 0) {
+        return;
+      }
+      cmdkState.activeIndex = Math.max(0, cmdkState.activeIndex - 1);
+      renderCmdk();
+      return;
+    }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (cmdkState.items.length === 0) {
+        return;
+      }
+      runCmdkItem(cmdkState.activeIndex);
+      return;
+    }
+    if (event.key === "Escape") {
+      if (cmdkState.query) {
+        event.preventDefault();
+        cmdkState.query = "";
+        cmdkState.activeIndex = 0;
+        cmdkInputEl.value = "";
+        renderCmdk();
+        return;
+      }
+      closeDialog(cmdkDialogEl);
+    }
+  });
+}
+
+document.addEventListener("keydown", (event) => {
+  const key = event.key || "";
+  const lower = key.toLowerCase();
+
+  if (lower === "k" && (event.metaKey || event.ctrlKey)) {
+    event.preventDefault();
+    openCmdk();
+    return;
+  }
+
+  if (isOpenDialog(cmdkDialogEl) || isOpenDialog(helpDialogEl)) {
+    return;
+  }
+
+  if (key === "?" && !isTypingTarget(event.target)) {
+    event.preventDefault();
+    openHelp();
+    return;
+  }
+
+  if (key === "/" && !isTypingTarget(event.target)) {
+    event.preventDefault();
+    if (searchEl) {
+      searchEl.focus();
+      searchEl.select();
+    }
+    return;
+  }
+
+  if (state.mainView === "task" && !isTypingTarget(event.target)) {
+    if (isInteractiveElement(document.activeElement)) {
+      return;
+    }
+    if (lower === "j" || key === "ArrowDown") {
+      event.preventDefault();
+      moveTimelineSelection(1);
+      return;
+    }
+    if (lower === "k" || key === "ArrowUp") {
+      event.preventDefault();
+      moveTimelineSelection(-1);
+      return;
+    }
+    if (key === "Enter") {
+      event.preventDefault();
+      toggleSelectedEventGroup();
+      return;
+    }
+    if (key === "Escape") {
+      if (state.search) {
+        event.preventDefault();
+        state.search = "";
+        if (searchEl) {
+          searchEl.value = "";
+        }
+        renderTimeline();
+        showToast("Cleared search.");
+        return;
+      }
+      if (state.focusedTaskId) {
+        event.preventDefault();
+        clearFocusedTask();
+        showToast("Cleared focus.");
+      }
+    }
+  }
+});
+
+updateSidebarVisibility();
 setMainView(state.mainView);
 
 wireFilters();

@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
     <title>Evolve My Claw</title>
     <link
       rel="stylesheet"
@@ -21,6 +22,13 @@
               <p>OpenClaw signal archive</p>
             </div>
           </div>
+        </div>
+        <div class="sidebar-tools">
+          <label class="sidebar-search">
+            <span class="sr-only">Search sessions</span>
+            <input id="session-search" type="search" placeholder="Search sessions or tasks" />
+          </label>
+          <div class="sidebar-hint" id="sidebar-hint"></div>
         </div>
         <div class="sidebar-section">
           <div id="sessions" class="session-list"></div>
@@ -41,11 +49,11 @@
                 class="view-option active"
                 type="button"
                 data-view="task"
-                data-label="Task"
+                data-label="Timeline"
                 role="tab"
-                aria-label="Task"
+                aria-label="Timeline"
               >
-                <span class="sr-only">Task</span>
+                <span class="view-option-label">Timeline</span>
               </button>
               <button
                 class="view-option"
@@ -55,12 +63,26 @@
                 role="tab"
                 aria-label="Evolution"
               >
-                <span class="sr-only">Evolution</span>
+                <span class="view-option-label">Evolution</span>
               </button>
               <span class="view-indicator" aria-hidden="true">
-                <span class="view-indicator-label">Task</span>
+                <span class="view-indicator-label">Timeline</span>
               </span>
             </div>
+          </div>
+          <div class="toolbar-right">
+            <button id="sidebar-toggle" class="toolbar-button" type="button">
+              <span class="toolbar-button-icon" aria-hidden="true">Menu</span>
+              <span class="toolbar-button-label">Sessions</span>
+            </button>
+            <button id="cmdk-open" class="toolbar-button" type="button">
+              <span class="toolbar-button-icon" aria-hidden="true">Ctrl K</span>
+              <span class="toolbar-button-label">Command</span>
+            </button>
+            <button id="help-open" class="toolbar-button" type="button">
+              <span class="toolbar-button-icon" aria-hidden="true">?</span>
+              <span class="toolbar-button-label">Shortcuts</span>
+            </button>
           </div>
         </div>
         <section id="task-view" class="view active">
@@ -71,11 +93,31 @@
                   <span class="search-label">Search</span>
                   <input id="search" type="search" placeholder="Search timeline" />
                 </label>
+                <div class="timeline-meta">
+                  <div id="timeline-count" class="timeline-count" aria-live="polite"></div>
+                  <button id="clear-focus" class="pill-button" type="button" hidden>
+                    Clear focus
+                  </button>
+                </div>
                 <details class="filters">
                   <summary class="filters-summary">
                     <span class="filters-label">Filters</span>
                   </summary>
                   <div class="filters-panel">
+                    <div class="filters-actions">
+                      <button class="filters-action" type="button" data-filter-action="all">
+                        All
+                      </button>
+                      <button class="filters-action" type="button" data-filter-action="none">
+                        None
+                      </button>
+                      <button class="filters-action" type="button" data-filter-action="messages">
+                        Messages
+                      </button>
+                      <button class="filters-action" type="button" data-filter-action="tools">
+                        Tools
+                      </button>
+                    </div>
                     <label class="filter-pill">
                       <input type="checkbox" data-kind="user_message" checked />
                       <span>User</span>
@@ -101,6 +143,10 @@
                       <span>Compaction</span>
                     </label>
                     <label class="filter-pill">
+                      <input type="checkbox" data-kind="branch_summary" checked />
+                      <span>Branch</span>
+                    </label>
+                    <label class="filter-pill">
                       <input type="checkbox" data-kind="agent_event" checked />
                       <span>Agent events</span>
                     </label>
@@ -119,6 +165,7 @@
                   </div>
                 </details>
               </div>
+              <div id="task-strip" class="task-strip" hidden></div>
               <section class="timeline-wrap">
                 <div id="timeline" class="timeline"></div>
               </section>
@@ -146,6 +193,74 @@
         </section>
       </main>
     </div>
+    <dialog id="cmdk" class="dialog dialog-cmdk">
+      <form method="dialog" class="dialog-shell">
+        <div class="dialog-header">
+          <div class="dialog-kicker">Command</div>
+          <button class="dialog-close" type="submit" value="cancel" aria-label="Close">
+            Esc
+          </button>
+        </div>
+        <label class="cmdk-search">
+          <span class="sr-only">Command search</span>
+          <input
+            id="cmdk-input"
+            type="search"
+            placeholder="Search sessions, tasks, and actions"
+            autocomplete="off"
+          />
+        </label>
+        <div
+          id="cmdk-results"
+          class="cmdk-results"
+          role="listbox"
+          aria-label="Command results"
+        ></div>
+        <div class="dialog-footer">
+          <div class="dialog-hint">
+            <span class="kbd">Up</span><span class="kbd">Down</span> navigate
+            <span class="kbd">Enter</span> open
+            <span class="kbd">Esc</span> close
+          </div>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="help" class="dialog dialog-help">
+      <form method="dialog" class="dialog-shell">
+        <div class="dialog-header">
+          <div class="dialog-kicker">Shortcuts</div>
+          <button class="dialog-close" type="submit" value="cancel" aria-label="Close">
+            Esc
+          </button>
+        </div>
+        <div class="help-grid" aria-label="Keyboard shortcuts">
+          <div class="help-row">
+            <div class="help-keys"><span class="kbd">Ctrl</span><span class="kbd">K</span></div>
+            <div class="help-desc">Open command</div>
+          </div>
+          <div class="help-row">
+            <div class="help-keys"><span class="kbd">/</span></div>
+            <div class="help-desc">Focus timeline search</div>
+          </div>
+          <div class="help-row">
+            <div class="help-keys"><span class="kbd">J</span><span class="kbd">K</span></div>
+            <div class="help-desc">Next / previous visible event</div>
+          </div>
+          <div class="help-row">
+            <div class="help-keys"><span class="kbd">Enter</span></div>
+            <div class="help-desc">Expand / collapse selected group</div>
+          </div>
+          <div class="help-row">
+            <div class="help-keys"><span class="kbd">Esc</span></div>
+            <div class="help-desc">Close dialogs, clear search</div>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <div class="dialog-hint">Tip: pick a task from the strip to focus a range.</div>
+        </div>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" aria-live="polite"></div>
     <script src="/app.js"></script>
   </body>
 </html>
