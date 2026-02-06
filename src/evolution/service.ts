@@ -14,9 +14,10 @@ import {
 } from "./types.js";
 import { appendEvolutionReports, loadEvolutionReports } from "./report-store.js";
 import {
-  listAgentWorkspaces,
   loadOpenClawConfig,
   resolveOpenClawConfigPath,
+  resolveAgentWorkspaceDir,
+  normalizeAgentId,
   type OpenClawConfigRecord,
 } from "./openclaw-config.js";
 
@@ -90,24 +91,35 @@ export async function getEvolutionReports(params: {
   return filtered.sort((a, b) => b.createdAt - a.createdAt);
 }
 
-function resolveAllowedPaths(cfg: OpenClawConfigRecord, stateDir: string): string[] {
-  const workspaceEntries = Array.from(listAgentWorkspaces(cfg).entries()).map(([agentId, dir]) => ({
-    agentId,
-    path: dir,
-  }));
-  const hooksDir = path.join(stateDir, "hooks");
-  const skillsDir = path.join(stateDir, "skills");
+function resolveAllowedPaths(params: {
+  workspacePaths: Array<{ agentId: string; path: string }>;
+  stateDir: string;
+}): string[] {
+  const hooksDir = path.join(params.stateDir, "hooks");
+  const skillsDir = path.join(params.stateDir, "skills");
   return [
-    ...workspaceEntries.map((entry) => entry.path),
+    ...params.workspacePaths.map((entry) => entry.path),
     hooksDir,
     skillsDir,
   ];
 }
 
-function resolveWorkspacePaths(cfg: OpenClawConfigRecord) {
-  return Array.from(listAgentWorkspaces(cfg).entries()).map(([agentId, dir]) => ({
+function resolveExecutionWorkspacePaths(params: {
+  cfg: OpenClawConfigRecord;
+  tasks: TaskRecord[];
+  excludeAgentIds: string[];
+  analysisAgentId: string;
+}): Array<{ agentId: string; path: string }> {
+  const excluded = new Set(
+    [...params.excludeAgentIds, params.analysisAgentId].map((id) => normalizeAgentId(id)),
+  );
+  const executionAgentIds = Array.from(
+    new Set(params.tasks.map((task) => normalizeAgentId(task.agentId))),
+  ).filter((agentId) => !excluded.has(agentId));
+
+  return executionAgentIds.map((agentId) => ({
     agentId,
-    path: dir,
+    path: resolveAgentWorkspaceDir(params.cfg, agentId),
   }));
 }
 
@@ -141,10 +153,15 @@ export async function runEvolutionAnalysis(params: {
     throw new Error("no matching tasks found");
   }
 
-  const allowedPaths = resolveAllowedPaths(openclawConfig, stateDir);
-  const workspacePaths = resolveWorkspacePaths(openclawConfig);
   const hooksDir = path.join(stateDir, "hooks");
   const skillsDir = path.join(stateDir, "skills");
+  const workspacePaths = resolveExecutionWorkspacePaths({
+    cfg: openclawConfig,
+    tasks,
+    excludeAgentIds: evolveConfig.excludeAgentIds,
+    analysisAgentId: params.analysisAgentId,
+  });
+  const allowedPaths = resolveAllowedPaths({ workspacePaths, stateDir });
 
   let readyResolve: (() => void) | undefined;
   let readyReject: ((err: Error) => void) | undefined;

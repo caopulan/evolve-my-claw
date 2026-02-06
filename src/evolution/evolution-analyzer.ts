@@ -97,6 +97,7 @@ function buildPrompt(params: {
   hooksDir: string;
   skillsDir: string;
   useSearch: boolean;
+  analysisAgentId: string;
 }): string {
   const taskBlocks = params.tasks.map((task) => buildTaskBlock(task));
   const tasksSection = taskBlocks.length > 0 ? taskBlocks.join("\n\n---\n\n") : "none";
@@ -146,14 +147,17 @@ function buildPrompt(params: {
     "- 没有 solution 的问题不要输出为条目。",
     "- changes 必须可执行，给出明确原因与修改内容。",
     "- openclaw_config_merge_patch 的 patch 只能包含顶层键：agents, bindings, tools, session, plugins, hooks, skills。",
+    "- 如需修改 openclaw_config，优先针对执行 Agent 或全局工具配置；不要修改 ANALYSIS_AGENT_ID 对应的 agent 配置（避免评估 Agent 自身被改动）。",
     "- 文件修改必须使用 target.path 指向绝对路径，并且路径必须在允许范围内。",
+    "- 所有 agent_file 修改必须针对执行任务的 Agent（EXECUTION_WORKSPACES）；不要修改评估 Agent 自己的 workspace（analysisAgentId）。",
     "- 如果 USE_SEARCH=true，必须至少使用一次 sessions_spawn 调用子代理检索 web 或 X/Twitter 方案；找到可行方案再写入 recommendation，并注明来源；找不到就不必提及。",
     "",
     `SELECTED_DIMENSIONS: ${params.dimensions.join(", ") || "none"}`,
     `CHANGE_TARGETS: ${params.changeTargets.join(", ") || "none"}`,
     `USE_SEARCH: ${params.useSearch ? "true" : "false"}`,
+    `ANALYSIS_AGENT_ID: ${params.analysisAgentId}`,
     `OPENCLAW_CONFIG: ${params.openclawConfigPath}`,
-    "WORKSPACES:",
+    "EXECUTION_WORKSPACES:",
     workspaceLines,
     `MANAGED_HOOKS_DIR: ${params.hooksDir}`,
     `MANAGED_SKILLS_DIR: ${params.skillsDir}`,
@@ -242,6 +246,7 @@ export async function analyzeEvolutionReport(params: {
     hooksDir: params.hooksDir,
     skillsDir: params.skillsDir,
     useSearch: params.useSearch,
+    analysisAgentId: params.analysisAgentId,
   });
   const idempotencyKey = crypto.randomUUID();
 

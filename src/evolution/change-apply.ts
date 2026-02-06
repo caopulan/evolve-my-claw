@@ -1,7 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { resolveOpenClawStateDir } from "../paths.js";
+import { loadConfig as loadEvolveConfig } from "../config.js";
 import type { EvolutionChange } from "./types.js";
+import { EVOLUTION_AGENT_ID } from "./constants.js";
 import {
   listAgentWorkspaces,
   loadOpenClawConfig,
@@ -69,7 +71,13 @@ function validateConfigPatch(patch: Record<string, unknown>): string | null {
 }
 
 function resolveAllowedRoots(config: OpenClawConfigRecord, stateDir: string): string[] {
-  const workspaces = Array.from(listAgentWorkspaces(config).values());
+  const evolveConfig = loadEvolveConfig({ stateDir });
+  const excluded = new Set(
+    [...evolveConfig.excludeAgentIds, EVOLUTION_AGENT_ID].map((id) => id.toLowerCase()),
+  );
+  const workspaces = Array.from(listAgentWorkspaces(config).entries())
+    .filter(([agentId]) => !excluded.has(agentId.toLowerCase()))
+    .map(([, dir]) => dir);
   const managedHooks = path.join(stateDir, "hooks");
   const managedSkills = path.join(stateDir, "skills");
   return [...workspaces, managedHooks, managedSkills];
