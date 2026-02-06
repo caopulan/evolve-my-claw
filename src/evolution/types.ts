@@ -57,6 +57,12 @@ export type EvolutionChange = {
   operation: EvolutionChangeOperation;
 };
 
+export type EvolutionUserAction = {
+  title: string;
+  reason?: string;
+  steps: string[];
+};
+
 export type EvolutionReportItem = {
   itemId: string;
   scope: "task" | "multi";
@@ -66,12 +72,18 @@ export type EvolutionReportItem = {
   title: string;
   reasoning: string;
   evidence?: string;
+  impact?: string;
+  risk?: string;
+  testPlan?: string;
+  rollbackPlan?: string;
   recommendation?: string;
+  userActions?: EvolutionUserAction[];
   changes?: EvolutionChange[];
 };
 
 export type EvolutionReportRecord = {
   type: "evolution_report";
+  schemaVersion?: number;
   reportId: string;
   createdAt: number;
   analysisAgentId: string;

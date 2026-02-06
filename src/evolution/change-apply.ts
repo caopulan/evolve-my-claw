@@ -13,16 +13,40 @@ import {
 } from "./openclaw-config.js";
 
 const ALLOWED_CONFIG_TOP_LEVEL = new Set([
+  "meta",
+  "wizard",
+  "diagnostics",
+  "auth",
+  "models",
   "agents",
-  "bindings",
   "tools",
+  "messages",
+  "commands",
+  "approvals",
+  "bindings",
   "session",
   "plugins",
   "hooks",
+  "channels",
+  "gateway",
   "skills",
 ]);
 
-const ALLOWED_FILE_EXTENSIONS = new Set([".md", ".json", ".json5", ".ts", ".js"]);
+const ALLOWED_FILE_EXTENSIONS = new Set([
+  ".md",
+  ".json",
+  ".json5",
+  ".ts",
+  ".js",
+  ".mjs",
+  ".cjs",
+  ".sh",
+  ".py",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".txt",
+]);
 
 type ApplyResult = {
   applied: boolean;
@@ -61,11 +85,61 @@ function applyMergePatch(target: unknown, patch: unknown): unknown {
   return result;
 }
 
-function validateConfigPatch(patch: Record<string, unknown>): string | null {
+function normalizeSensitiveKey(key: string): string {
+  return key.replace(/[^a-z0-9]/gi, "").toLowerCase();
+}
+
+function isSensitiveKeyName(key: string): boolean {
+  const normalized = normalizeSensitiveKey(key);
+  return (
+    normalized === "token" ||
+    normalized === "password" ||
+    normalized === "secret" ||
+    normalized === "apikey" ||
+    normalized === "accesskey" ||
+    normalized === "privatekey" ||
+    normalized === "clientsecret" ||
+    normalized === "refreshtoken" ||
+    normalized === "bearertoken"
+  );
+}
+
+function findSensitivePatchPath(value: unknown, prefix: string[] = []): string | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (let idx = 0; idx < value.length; idx += 1) {
+      const hit = findSensitivePatchPath(value[idx], [...prefix, `[${idx}]`]);
+      if (hit) {
+        return hit;
+      }
+    }
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const [key, child] of Object.entries(record)) {
+    if (isSensitiveKeyName(key) && child !== null) {
+      return [...prefix, key].join(".");
+    }
+    const hit = findSensitivePatchPath(child, [...prefix, key]);
+    if (hit) {
+      return hit;
+    }
+  }
+  return null;
+}
+
+function validateConfigPatch(baseConfig: OpenClawConfigRecord, patch: Record<string, unknown>): string | null {
   for (const key of Object.keys(patch)) {
-    if (!ALLOWED_CONFIG_TOP_LEVEL.has(key)) {
+    if (!ALLOWED_CONFIG_TOP_LEVEL.has(key) && !(key in baseConfig)) {
       return `patch contains unsupported top-level key "${key}"`;
     }
+  }
+  const sensitive = findSensitivePatchPath(patch);
+  if (sensitive) {
+    return `patch attempts to set sensitive key "${sensitive}" (use userActions instead)`;
   }
   return null;
 }
@@ -155,7 +229,7 @@ export function applyEvolutionChange(params: {
     if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
       return { applied: false, message: "patch must be an object" };
     }
-    const patchError = validateConfigPatch(patch as Record<string, unknown>);
+    const patchError = validateConfigPatch(config, patch as Record<string, unknown>);
     if (patchError) {
       return { applied: false, message: patchError };
     }

@@ -281,10 +281,12 @@ function evolutionGuidanceBlock(): string {
     "- Respect the chosen analysis dimensions and change targets.",
     "- Prefer minimal, high-impact modifications; avoid changes without clear benefit.",
     "- Provide concrete reasons, evidence, and expected impact for every recommendation.",
+    "- Prefer self-evolution via concrete changes (config/file edits). User actions are a fallback when secrets or manual steps are required.",
+    "- Always include impact, risk, and a test plan so changes are safe to apply.",
     "",
     "Change execution:",
     "- Use structured JSON changes with explicit file targets and safe operations.",
-    "- Config edits should be merge patches limited to agents/bindings/tools/session/plugins/hooks/skills.",
+    "- Config edits should be merge patches limited to supported top-level keys (agents/tools/messages/commands/approvals/hooks/gateway/skills/plugins, etc).",
     "- File edits should be append/replace/write with precise search strings.",
     "- Paths must stay within allowed OpenClaw workspaces or managed hooks/skills.",
   ].join("\n");

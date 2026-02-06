@@ -1614,11 +1614,56 @@ function renderEvolutionView() {
         setMarkdown(evidence, item.evidence, "block");
         itemCard.appendChild(evidence);
       }
+      if (item.impact) {
+        const impact = document.createElement("div");
+        impact.className = "evolution-impact";
+        setMarkdown(impact, `**Impact**\n\n${item.impact}`, "block");
+        itemCard.appendChild(impact);
+      }
+      if (item.risk) {
+        const risk = document.createElement("div");
+        risk.className = "evolution-risk";
+        setMarkdown(risk, `**Risk**\n\n${item.risk}`, "block");
+        itemCard.appendChild(risk);
+      }
+      if (item.testPlan) {
+        const testPlan = document.createElement("div");
+        testPlan.className = "evolution-testplan";
+        setMarkdown(testPlan, `**Test plan**\n\n${item.testPlan}`, "block");
+        itemCard.appendChild(testPlan);
+      }
+      if (item.rollbackPlan) {
+        const rollback = document.createElement("div");
+        rollback.className = "evolution-rollback";
+        setMarkdown(rollback, `**Rollback plan**\n\n${item.rollbackPlan}`, "block");
+        itemCard.appendChild(rollback);
+      }
       if (item.recommendation) {
         const recommendation = document.createElement("div");
         recommendation.className = "evolution-recommendation";
         setMarkdown(recommendation, item.recommendation, "block");
         itemCard.appendChild(recommendation);
+      }
+      if (Array.isArray(item.userActions) && item.userActions.length > 0) {
+        const actions = document.createElement("div");
+        actions.className = "evolution-useractions";
+        const blocks = ["**User actions**", ""];
+        item.userActions.forEach((action) => {
+          blocks.push(`### ${action.title || "Action"}`);
+          if (action.reason) {
+            blocks.push(action.reason);
+            blocks.push("");
+          }
+          const steps = Array.isArray(action.steps) ? action.steps.filter(Boolean) : [];
+          if (steps.length > 0) {
+            steps.forEach((step, idx) => blocks.push(`${idx + 1}. ${step}`));
+          } else {
+            blocks.push("(no steps provided)");
+          }
+          blocks.push("");
+        });
+        setMarkdown(actions, blocks.join("\n"), "block");
+        itemCard.appendChild(actions);
       }
 
       if (Array.isArray(item.changes) && item.changes.length > 0) {

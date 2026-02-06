@@ -452,7 +452,12 @@ body::after {
 
 .evolution-text,
 .evolution-evidence,
-.evolution-recommendation {
+.evolution-recommendation,
+.evolution-impact,
+.evolution-risk,
+.evolution-testplan,
+.evolution-rollback,
+.evolution-useractions {
   font-size: 13px;
   color: var(--ink-soft);
   margin-bottom: 8px;
