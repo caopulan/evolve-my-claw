@@ -10,6 +10,25 @@ This repository contains **Evolve My Claw**, an external timeline and evolution 
 - Analyze task candidates with OpenClaw itself (LLM) and append structured analysis JSONL.
 - Avoid modifying the OpenClaw repo unless explicitly requested.
 
+## OpenClaw Source (Reference)
+
+- OpenClaw source repo: https://github.com/openclaw/openclaw
+- Keep a local clone of OpenClaw available for reference when changing this repo's code (schemas, session log formats, gateway events, config behavior, etc.).
+- Prefer a sibling checkout:
+
+```bash
+cd ..
+git clone https://github.com/openclaw/openclaw.git openclaw
+```
+
+- Alternatively, clone into a temp folder:
+
+```bash
+git clone https://github.com/openclaw/openclaw.git "${TMPDIR:-/tmp}/openclaw"
+```
+
+- Treat the OpenClaw clone as read-only unless explicitly requested to modify OpenClaw itself.
+
 ## GitHub Description
 
 Task-first telemetry for OpenClaw—merge subagents, visualize timelines, drive evolution.
