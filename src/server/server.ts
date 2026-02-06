@@ -2,6 +2,7 @@ import path from "node:path";
 import fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import { buildTimeline, getSessions, getTasks, getAnalyses } from "./api.js";
+import { parseTasks } from "./parse.js";
 import {
   getEvolutionReports,
   parseChangeTargets,
@@ -18,6 +19,7 @@ export async function startServer(params: {
 }) {
   const app = fastify({ logger: false });
   const publicDir = path.join(process.cwd(), "public");
+  let parseRunning = false;
 
   app.get("/api/sessions", async () => {
     return { sessions: getSessions(params.stateDir) };
@@ -39,6 +41,23 @@ export async function startServer(params: {
     const sessionKey = typeof query.sessionKey === "string" ? query.sessionKey.trim() : undefined;
     const tasks = await getTasks({ stateDir: params.stateDir, sessionKey });
     return { tasks };
+  });
+
+  app.post("/api/parse", async (_request, reply) => {
+    if (parseRunning) {
+      reply.code(409);
+      return { error: "parse already running" };
+    }
+    parseRunning = true;
+    try {
+      const result = await parseTasks(params.stateDir);
+      return { ok: true, result };
+    } catch (err) {
+      reply.code(500);
+      return { error: (err as Error).message };
+    } finally {
+      parseRunning = false;
+    }
   });
 
   app.get("/api/analyses", async (request) => {

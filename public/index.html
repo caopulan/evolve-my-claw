@@ -24,10 +24,20 @@
           </div>
         </div>
         <div class="sidebar-tools">
-          <label class="sidebar-search">
-            <span class="sr-only">Search sessions</span>
-            <input id="session-search" type="search" placeholder="Search sessions or tasks" />
-          </label>
+          <div class="sidebar-search-row">
+            <label class="sidebar-search">
+              <span class="sr-only">Search sessions</span>
+              <input id="session-search" type="search" placeholder="Search sessions or tasks" />
+            </label>
+            <button
+              id="parse-tasks"
+              class="sidebar-action"
+              type="button"
+              title="Parse task candidates"
+            >
+              Parse
+            </button>
+          </div>
           <div class="sidebar-hint" id="sidebar-hint"></div>
         </div>
         <div class="sidebar-section">
@@ -260,7 +270,22 @@
         </div>
       </form>
     </dialog>
+    <dialog id="parse-dialog" class="dialog dialog-parse">
+      <form method="dialog" class="dialog-shell">
+        <div class="dialog-header">
+          <div class="dialog-kicker">Parse</div>
+          <button class="dialog-close" type="submit" value="cancel" aria-label="Close">
+            Esc
+          </button>
+        </div>
+        <pre id="parse-output" class="parse-output" aria-label="Parse results"></pre>
+        <div class="dialog-footer">
+          <div class="dialog-hint">Parses sessions into task candidates for this UI.</div>
+        </div>
+      </form>
+    </dialog>
     <div id="toast" class="toast" aria-live="polite"></div>
     <script src="/app.js"></script>
+    <script src="/parse.js"></script>
   </body>
 </html>
