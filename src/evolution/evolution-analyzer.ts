@@ -318,6 +318,7 @@ function buildPrompt(params: {
     "- evidence 必须引用 TASKS/TOOLS 或 CONFIG/WORKSPACE_EXCERPTS 中的具体片段（比如 toolName、error、文件段落）。",
     "- 如果 REQUIRED_RULE_IDS 非空：每个 ruleId 至少要在一个 item.ruleIds 中出现（覆盖命中规则）。",
     "- item.ruleIds 尽量填写（可以多个）。",
+    "- 对任何新增/修改的技能(hook/skill/文档/工具配置)：必须说明它在下一次任务里如何被适时查看或使用（触达路径）。无法说明触达路径的改动不应输出（属于 no-op）。",
     "- openclaw_config_merge_patch 使用 JSON merge patch：对象递归 merge，null 表示删除 key。",
     "- openclaw_config_merge_patch 的 patch 只能包含顶层键：meta, wizard, diagnostics, models, agents, tools, messages, commands, approvals, hooks, channels, gateway, skills, plugins, bindings, session。",
     "- 不要在 patch 或文件内容里写入任何 secret 值（token/password/secret/apiKey 等）。需要 secret 时写入 userActions。",

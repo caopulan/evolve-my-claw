@@ -97,6 +97,20 @@ Evolution report item 的目标优先级:
 2. `recommendation`: 给执行策略/替代方案（不涉及落盘）
 3. `userActions`: 只有当需要用户提供 secret 或手工操作（安装依赖/配置 key）时才使用
 
+### 有效性约束（必须产生实际作用）
+
+当规则建议“新增/修改工具能力”（例如新增 skill/hook、修改 TOOLS.md/AGENTS.md、调整 tool 配置）时，必须同时回答一个问题:
+
+**这次改动在下一次任务里是否会被适时查看或使用？**
+
+需要显式给出至少一种“触达路径”（否则属于无效改动，不应输出):
+
+- **自动触达**: 通过 hook 在生命周期/命令事件触发时自动运行（例如 `gateway:startup`、`command:new`），或通过规则引擎在下次分析时命中。
+- **工作流触达**: 把关键用法写入会被 agent 经常读取的 workspace 文件（如 `TOOLS.md` / `AGENTS.md` / `BOOTSTRAP.md`），并确保该文件在 `WORKSPACE_EXCERPTS` 中可被纳入 prompt。
+- **工具链触达**: 配置变更能直接影响下一次工具决策（例如禁用一个反复失败的工具、启用一个更可靠的 fallback）。
+
+如果无法说明触达路径，规则应退化为更直接的 changes（例如修配置、加 fallback），或者只给 recommendation（但必须解释为什么 recommendation 就能在下次生效）。
+
 强制字段:
 
 - `evidence`: 必须引用 TASKS/TOOLS 或 WORKSPACE_EXCERPTS 的片段
@@ -140,4 +154,3 @@ Evolution report item 的目标优先级:
 
 - 只出现 1 次、且问题高度任务特异（先放 recommendation, 不要引入规则复杂度）
 - 需要大量上下文推理才能判断对错（先让 LLM 输出, 再决定是否抽象为规则）
-
