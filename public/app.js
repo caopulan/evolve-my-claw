@@ -42,6 +42,9 @@ const state = {
   evolutionHistoryQuery: "",
   evolutionActiveReportId: null,
   evolutionOpenItemIds: new Set(),
+  evolutionSessionKey: null,
+  evolutionSessionQuery: "",
+  evolutionTaskQuery: "",
   applyingChanges: new Set(),
   appliedChanges: new Set(),
 };
@@ -637,6 +640,15 @@ function ensureEvolutionActiveReportId(reports) {
 }
 
 function renderEvolutionViewPreserveFocus() {
+  const scrollIds = ["evo-session-list", "evo-task-list", "evo-detail-body"];
+  const scrollTops = new Map();
+  scrollIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      scrollTops.set(id, el.scrollTop);
+    }
+  });
+
   const active = document.activeElement;
   if (active && active instanceof HTMLInputElement) {
     const id = active.id;
@@ -654,9 +666,21 @@ function renderEvolutionViewPreserveFocus() {
         }
       }
     }
+    scrollTops.forEach((top, key) => {
+      const el = document.getElementById(key);
+      if (el) {
+        el.scrollTop = top;
+      }
+    });
     return;
   }
   renderEvolutionView();
+  scrollTops.forEach((top, key) => {
+    const el = document.getElementById(key);
+    if (el) {
+      el.scrollTop = top;
+    }
+  });
 }
 
 function setActiveTask(taskId) {
@@ -675,7 +699,7 @@ function focusTask(task) {
   state.activeTaskId = task.taskId;
   state.focusedTaskId = task.taskId;
   updateActiveSessionCard();
-  renderSessions();
+  renderSidebar();
   if (task.sessionKey && task.sessionKey !== state.activeSessionKey) {
     loadTimeline(task.sessionKey);
   } else {
@@ -691,7 +715,7 @@ function clearFocusedTask() {
   }
   state.focusedTaskId = null;
   state.activeTaskId = null;
-  renderSessions();
+  renderSidebar();
   updateActiveSessionCard();
   renderTimeline();
   renderDetailPanel();
@@ -724,6 +748,8 @@ function setMainView(view) {
   if (mainEl) {
     mainEl.setAttribute("data-view", view);
   }
+  updateSidebarVisibility();
+  renderSidebar();
   if (view === "evolution") {
     renderEvolutionView();
   } else {
@@ -740,7 +766,8 @@ function updateSidebarVisibility() {
   if (sidebarToggleEl) {
     const label = sidebarToggleEl.querySelector(".toolbar-button-label");
     if (label) {
-      label.textContent = state.sidebarHidden ? "Show sessions" : "Hide sessions";
+      const noun = state.mainView === "evolution" ? "history" : "sessions";
+      label.textContent = state.sidebarHidden ? `Show ${noun}` : `Hide ${noun}`;
     }
   }
 }
@@ -1190,7 +1217,7 @@ function renderSessions() {
     card.addEventListener("click", () => {
       state.focusedTaskId = null;
       state.activeTaskId = null;
-      renderSessions();
+      renderSidebar();
       updateActiveSessionCard();
       loadTimeline(session.key);
     });
@@ -1273,7 +1300,7 @@ function renderSessions() {
             }
           }
           persistSelectedTaskIds();
-          renderSessions();
+          renderSidebar();
           updateActiveSessionCard();
           renderDetailPanel();
           renderEvolutionView();
@@ -1323,6 +1350,141 @@ function renderSessions() {
     tree.appendChild(taskList);
     sessionsEl.appendChild(tree);
   });
+}
+
+function syncSidebarSearchInput() {
+  if (!sessionSearchEl) {
+    return;
+  }
+  if (state.mainView === "evolution") {
+    sessionSearchEl.placeholder = "Search evolution reports";
+    sessionSearchEl.value = state.evolutionHistoryQuery || "";
+  } else {
+    sessionSearchEl.placeholder = "Search sessions or tasks";
+    sessionSearchEl.value = state.sessionSearch || "";
+  }
+}
+
+function renderEvolutionSidebar() {
+  sessionsEl.innerHTML = "";
+  const previousActiveReportId = state.evolutionActiveReportId;
+
+  const selectedTaskIds = getSelectedTaskIdsArray();
+  const selectionFilter = state.evolutionHistoryScope === "selection" && selectedTaskIds.length > 0;
+  const query = state.evolutionHistoryQuery.trim().toLowerCase();
+
+  const filteredReports = state.evolutionReports.filter((report) => {
+    if (selectionFilter && !reportMatchesTaskSelection(report, selectedTaskIds)) {
+      return false;
+    }
+    if (query && !evolutionReportSearchText(report).includes(query)) {
+      return false;
+    }
+    return true;
+  });
+
+  if (sidebarHintEl) {
+    const shown = filteredReports.length;
+    const total = state.evolutionReports.length;
+    const scopeLabel = selectionFilter ? "scope:selection" : "scope:all";
+    const hintParts = [`${shown}/${total} reports`, scopeLabel];
+    if (query) {
+      hintParts.push(`query: "${query}"`);
+    }
+    sidebarHintEl.textContent = hintParts.join(" · ");
+  }
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "history-toolbar";
+
+  const scope = document.createElement("div");
+  scope.className = "history-scope";
+
+  const makeScopeBtn = (label, value, disabled = false) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `history-scope-btn${state.evolutionHistoryScope === value ? " active" : ""}`;
+    btn.textContent = label;
+    btn.disabled = disabled;
+    btn.addEventListener("click", () => {
+      if (state.evolutionHistoryScope === value) {
+        return;
+      }
+      state.evolutionHistoryScope = value;
+      persistString(EVOLUTION_HISTORY_SCOPE_KEY, state.evolutionHistoryScope);
+      renderSidebar();
+    });
+    return btn;
+  };
+
+  scope.appendChild(makeScopeBtn("All", "all"));
+  scope.appendChild(makeScopeBtn("Selection", "selection", selectedTaskIds.length === 0));
+  toolbar.appendChild(scope);
+  sessionsEl.appendChild(toolbar);
+
+  if (state.evolutionReports.length === 0) {
+    sessionsEl.appendChild(createEmptyState("No evolution reports yet."));
+    return;
+  }
+  if (filteredReports.length === 0) {
+    sessionsEl.appendChild(
+      createEmptyState(query ? "No reports match this search." : "No reports match this filter."),
+    );
+    return;
+  }
+
+  if (!state.evolutionActiveReportId) {
+    ensureEvolutionActiveReportId(filteredReports);
+  } else if (!filteredReports.some((report) => report?.reportId === state.evolutionActiveReportId)) {
+    state.evolutionActiveReportId = filteredReports[0].reportId ?? null;
+    persistString(EVOLUTION_ACTIVE_REPORT_KEY, state.evolutionActiveReportId ?? "");
+    state.evolutionOpenItemIds = new Set();
+  }
+
+  if (previousActiveReportId !== state.evolutionActiveReportId) {
+    renderEvolutionView();
+  }
+
+  filteredReports.forEach((report, idx) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    const isActive = report.reportId === state.evolutionActiveReportId;
+    row.className = `history-row${isActive ? " active" : ""}`;
+    row.style.setProperty("--index", String(idx));
+    row.addEventListener("click", () => {
+      if (state.evolutionActiveReportId === report.reportId) {
+        return;
+      }
+      state.evolutionActiveReportId = report.reportId;
+      persistString(EVOLUTION_ACTIVE_REPORT_KEY, state.evolutionActiveReportId ?? "");
+      state.evolutionOpenItemIds = new Set();
+      renderEvolutionView();
+      renderSidebar();
+    });
+
+    const title = document.createElement("div");
+    title.className = "history-row-title";
+    title.textContent = truncateText(report.summary || "Evolution report", 70);
+    row.appendChild(title);
+
+    const meta = document.createElement("div");
+    meta.className = "history-row-meta";
+    const items = Array.isArray(report.items) ? report.items.length : 0;
+    const changes = countEvolutionReportChanges(report);
+    meta.textContent = `${formatTaskTime(report.createdAt)} · ${items} items · ${changes} changes`;
+    row.appendChild(meta);
+
+    sessionsEl.appendChild(row);
+  });
+}
+
+function renderSidebar() {
+  syncSidebarSearchInput();
+  if (state.mainView === "evolution") {
+    renderEvolutionSidebar();
+  } else {
+    renderSessions();
+  }
 }
 
 function updateActiveSessionCard() {
@@ -1500,7 +1662,7 @@ function renderDetailPanel() {
         state.selectedTaskIds.add(task.taskId);
       }
       persistSelectedTaskIds();
-      renderSessions();
+      renderSidebar();
       renderEvolutionView();
       updateSelectBtn();
     });
@@ -1647,49 +1809,72 @@ function renderEvolutionView() {
   const selectedCount = selectedTasks.length;
   const selectedTaskIds = getSelectedTaskIdsArray();
 
+  const totalReports = state.evolutionReports.length;
+  const activeReport = getEvolutionReportById(state.evolutionActiveReportId);
+
+  const sessionKeys = state.sessions.map((session) => session.key);
+  if (!state.evolutionSessionKey || !sessionKeys.includes(state.evolutionSessionKey)) {
+    if (state.activeSessionKey && sessionKeys.includes(state.activeSessionKey)) {
+      state.evolutionSessionKey = state.activeSessionKey;
+    } else {
+      state.evolutionSessionKey = sessionKeys[0] ?? null;
+    }
+  }
+
+  const activeSession =
+    state.evolutionSessionKey && typeof state.evolutionSessionKey === "string"
+      ? state.sessions.find((session) => session.key === state.evolutionSessionKey) ?? null
+      : null;
+  const activeSessionLabel = activeSession
+    ? formatSessionTitle(activeSession) ||
+      activeSession.displayName ||
+      activeSession.label ||
+      activeSession.key
+    : "";
+
   if (evolutionSubtitleEl) {
-    const reportCount = state.evolutionReports.length;
     const selectionLabel = selectedCount
       ? `${selectedCount} task${selectedCount > 1 ? "s" : ""} selected`
       : "No tasks selected";
-    const historyLabel = reportCount
-      ? `${reportCount} report${reportCount === 1 ? "" : "s"} stored`
-      : "No stored reports";
-    evolutionSubtitleEl.textContent = `${selectionLabel} · ${historyLabel}`;
+    const historyLabel = totalReports ? `${totalReports} report${totalReports === 1 ? "" : "s"}` : "No reports";
+    const sessionLabel = activeSessionLabel ? `session: ${truncateText(activeSessionLabel, 42)}` : "no session";
+    evolutionSubtitleEl.textContent = `${selectionLabel} · ${sessionLabel} · ${historyLabel}`;
   }
 
-  const makeChip = (label, pressed, onClick) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = `evo-chip${pressed ? " is-on" : ""}`;
-    btn.setAttribute("aria-pressed", pressed ? "true" : "false");
-    btn.textContent = label;
-    btn.addEventListener("click", onClick);
-    return btn;
-  };
+  const workbench = document.createElement("div");
+  workbench.className = "evo-workbench";
 
-  const composerGrid = document.createElement("div");
-  composerGrid.className = "evo-composer-grid";
+  const runner = document.createElement("section");
+  runner.className = "evo-runner";
 
-  const selectionCard = document.createElement("section");
-  selectionCard.className = "evo-card evo-card-selection";
+  const runnerHeader = document.createElement("div");
+  runnerHeader.className = "evo-runner-header";
+  const runnerTitle = document.createElement("div");
+  runnerTitle.className = "evo-runner-title";
+  runnerTitle.textContent = "Runner";
+  const runnerMeta = document.createElement("div");
+  runnerMeta.className = "evo-runner-meta";
+  runnerMeta.textContent = selectedCount ? `${selectedCount} selected` : "Select tasks then run";
+  runnerHeader.appendChild(runnerTitle);
+  runnerHeader.appendChild(runnerMeta);
+  runner.appendChild(runnerHeader);
 
-  const selectionHeader = document.createElement("div");
-  selectionHeader.className = "evo-card-header";
-  const selectionTitle = document.createElement("div");
-  selectionTitle.className = "evo-card-title";
-  selectionTitle.textContent = "Selection";
-  const selectionMeta = document.createElement("div");
-  selectionMeta.className = "evo-card-meta";
-  selectionMeta.textContent = selectedCount ? `${selectedCount} tasks` : "Pick tasks from the left sidebar";
-  selectionHeader.appendChild(selectionTitle);
-  selectionHeader.appendChild(selectionMeta);
+  const runnerBody = document.createElement("div");
+  runnerBody.className = "evo-runner-body";
 
+  const selectionBlock = document.createElement("div");
+  selectionBlock.className = "evo-block";
+  const selectionTop = document.createElement("div");
+  selectionTop.className = "evo-block-top";
+  const selectionLabel = document.createElement("div");
+  selectionLabel.className = "evo-block-title";
+  selectionLabel.textContent = "Selected tasks";
   const selectionActions = document.createElement("div");
-  selectionActions.className = "evo-card-actions";
+  selectionActions.className = "evo-block-actions";
+
   const clearSelectionBtn = document.createElement("button");
   clearSelectionBtn.type = "button";
-  clearSelectionBtn.className = "evo-mini";
+  clearSelectionBtn.className = "evo-btn";
   clearSelectionBtn.textContent = "Clear";
   clearSelectionBtn.disabled = selectedCount === 0;
   clearSelectionBtn.addEventListener("click", () => {
@@ -1697,33 +1882,34 @@ function renderEvolutionView() {
     state.activeTaskId = null;
     state.focusedTaskId = null;
     persistSelectedTaskIds();
-    renderSessions();
+    renderSidebar();
     updateActiveSessionCard();
     renderTimeline();
     renderDetailPanel();
-    renderEvolutionView();
+    renderEvolutionViewPreserveFocus();
   });
   selectionActions.appendChild(clearSelectionBtn);
 
-  selectionCard.appendChild(selectionHeader);
-  selectionCard.appendChild(selectionActions);
+  selectionTop.appendChild(selectionLabel);
+  selectionTop.appendChild(selectionActions);
+  selectionBlock.appendChild(selectionTop);
 
-  const tokenList = document.createElement("div");
-  tokenList.className = "evo-token-list";
+  const selectedList = document.createElement("div");
+  selectedList.className = "evo-token-list";
   if (selectedTasks.length === 0) {
     const empty = document.createElement("div");
     empty.className = "evo-token-empty";
     empty.textContent = "No tasks selected.";
-    tokenList.appendChild(empty);
+    selectedList.appendChild(empty);
   } else {
-    selectedTasks.forEach((task) => {
+    selectedTasks.slice(0, 12).forEach((task) => {
       const token = document.createElement("div");
       token.className = "evo-token";
 
       const main = document.createElement("button");
       main.type = "button";
       main.className = "evo-token-main";
-      main.textContent = taskDisplayTitle(task, 80) || task.taskId || "Task";
+      main.textContent = taskDisplayTitle(task, 84) || task.taskId || "Task";
       main.addEventListener("click", () => {
         focusTask(task);
         setMainView("task");
@@ -1747,118 +1933,336 @@ function renderEvolutionView() {
           state.focusedTaskId = null;
         }
         persistSelectedTaskIds();
-        renderSessions();
-        updateActiveSessionCard();
-        renderTimeline();
-        renderDetailPanel();
-        renderEvolutionView();
+        renderSidebar();
+        renderEvolutionViewPreserveFocus();
       });
 
       token.appendChild(main);
       token.appendChild(remove);
-      tokenList.appendChild(token);
+      selectedList.appendChild(token);
     });
+    if (selectedTasks.length > 12) {
+      const more = document.createElement("div");
+      more.className = "evo-token-more";
+      more.textContent = `+${selectedTasks.length - 12} more…`;
+      selectedList.appendChild(more);
+    }
   }
-  selectionCard.appendChild(tokenList);
-  composerGrid.appendChild(selectionCard);
+  selectionBlock.appendChild(selectedList);
+  runnerBody.appendChild(selectionBlock);
 
-  const configCard = document.createElement("section");
-  configCard.className = "evo-card evo-card-config";
+  const sessionBlock = document.createElement("div");
+  sessionBlock.className = "evo-block";
+  const sessionTop = document.createElement("div");
+  sessionTop.className = "evo-block-top";
+  const sessionTitle = document.createElement("div");
+  sessionTitle.className = "evo-block-title";
+  sessionTitle.textContent = "Session";
+  const sessionMeta = document.createElement("div");
+  sessionMeta.className = "evo-block-meta";
+  sessionMeta.textContent = activeSessionLabel ? truncateText(activeSessionLabel, 46) : "Select a session";
+  sessionTop.appendChild(sessionTitle);
+  sessionTop.appendChild(sessionMeta);
+  sessionBlock.appendChild(sessionTop);
 
-  const configHeader = document.createElement("div");
-  configHeader.className = "evo-card-header";
+  const sessionSearch = document.createElement("input");
+  sessionSearch.id = "evo-session-search";
+  sessionSearch.type = "search";
+  sessionSearch.className = "evo-input";
+  sessionSearch.placeholder = "Search sessions…";
+  sessionSearch.value = state.evolutionSessionQuery;
+  sessionSearch.addEventListener("input", () => {
+    state.evolutionSessionQuery = sessionSearch.value || "";
+    renderEvolutionViewPreserveFocus();
+  });
+  sessionBlock.appendChild(sessionSearch);
+
+  const sessionList = document.createElement("div");
+  sessionList.id = "evo-session-list";
+  sessionList.className = "evo-session-list";
+  const sessionQuery = state.evolutionSessionQuery.trim().toLowerCase();
+  const sessionsFiltered = sessionQuery
+    ? state.sessions.filter((session) => sessionSearchText(session).includes(sessionQuery))
+    : state.sessions;
+  if (sessionsFiltered.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "evo-list-empty";
+    empty.textContent = sessionQuery ? "No sessions match this search." : "No sessions found.";
+    sessionList.appendChild(empty);
+  } else {
+    sessionsFiltered.slice(0, 50).forEach((session) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const isActive = session.key === state.evolutionSessionKey;
+      btn.className = `evo-session-row${isActive ? " active" : ""}`;
+      btn.addEventListener("click", () => {
+        if (state.evolutionSessionKey === session.key) {
+          return;
+        }
+        state.evolutionSessionKey = session.key;
+        state.evolutionTaskQuery = "";
+        renderEvolutionView();
+      });
+
+      const top = document.createElement("div");
+      top.className = "evo-session-top";
+      const name = document.createElement("div");
+      name.className = "evo-session-title";
+      name.textContent =
+        formatSessionTitle(session) || session.displayName || session.label || session.key;
+      const tasksCount = state.tasksLoaded ? (state.tasksBySession.get(session.key) || []).length : null;
+      const count = document.createElement("div");
+      count.className = "evo-session-count";
+      count.textContent = typeof tasksCount === "number" ? `${tasksCount}` : "…";
+      top.appendChild(name);
+      top.appendChild(count);
+      btn.appendChild(top);
+
+      const meta = document.createElement("div");
+      meta.className = "evo-session-meta";
+      meta.textContent = formatSessionMeta(session, tasksCount ?? undefined);
+      btn.appendChild(meta);
+
+      sessionList.appendChild(btn);
+    });
+    if (sessionsFiltered.length > 50) {
+      const more = document.createElement("div");
+      more.className = "evo-list-more";
+      more.textContent = `Showing 50/${sessionsFiltered.length}. Narrow search to see more.`;
+      sessionList.appendChild(more);
+    }
+  }
+  sessionBlock.appendChild(sessionList);
+  runnerBody.appendChild(sessionBlock);
+
+  const tasksBlock = document.createElement("div");
+  tasksBlock.className = "evo-block";
+  const tasksTop = document.createElement("div");
+  tasksTop.className = "evo-block-top";
+  const tasksTitle = document.createElement("div");
+  tasksTitle.className = "evo-block-title";
+  tasksTitle.textContent = "Tasks";
+  const tasksMeta = document.createElement("div");
+  tasksMeta.className = "evo-block-meta";
+  tasksTop.appendChild(tasksTitle);
+  tasksTop.appendChild(tasksMeta);
+  tasksBlock.appendChild(tasksTop);
+
+  const taskSearch = document.createElement("input");
+  taskSearch.id = "evo-task-search";
+  taskSearch.type = "search";
+  taskSearch.className = "evo-input";
+  taskSearch.placeholder = "Search tasks…";
+  taskSearch.value = state.evolutionTaskQuery;
+  taskSearch.addEventListener("input", () => {
+    state.evolutionTaskQuery = taskSearch.value || "";
+    renderEvolutionViewPreserveFocus();
+  });
+  tasksBlock.appendChild(taskSearch);
+
+  const tasksList = document.createElement("div");
+  tasksList.id = "evo-task-list";
+  tasksList.className = "evo-task-list";
+  if (!state.tasksLoaded) {
+    const empty = document.createElement("div");
+    empty.className = "evo-list-empty";
+    empty.textContent = "Loading tasks…";
+    tasksList.appendChild(empty);
+  } else if (!state.evolutionSessionKey) {
+    const empty = document.createElement("div");
+    empty.className = "evo-list-empty";
+    empty.textContent = "Select a session to view tasks.";
+    tasksList.appendChild(empty);
+  } else {
+    const all = state.tasksBySession.get(state.evolutionSessionKey) || [];
+    const taskQuery = state.evolutionTaskQuery.trim().toLowerCase();
+    const visible = taskQuery
+      ? all.filter((task) => {
+          const title = taskDisplayTitle(task);
+          const messageId = extractMessageId(task.userMessage || "");
+          return `${title} ${messageId} ${task.taskId ?? ""}`.toLowerCase().includes(taskQuery);
+        })
+      : all;
+    tasksMeta.textContent = `${visible.length}/${all.length} shown`;
+
+    if (visible.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "evo-list-empty";
+      empty.textContent = taskQuery ? "No tasks match this search." : "No tasks found for session.";
+      tasksList.appendChild(empty);
+    } else {
+      const actions = document.createElement("div");
+      actions.className = "evo-task-actions";
+      const selectVisible = document.createElement("button");
+      selectVisible.type = "button";
+      selectVisible.className = "evo-btn";
+      selectVisible.textContent = "Select visible";
+      selectVisible.addEventListener("click", () => {
+        visible.forEach((task) => {
+          if (task?.taskId) {
+            state.selectedTaskIds.add(task.taskId);
+          }
+        });
+        persistSelectedTaskIds();
+        renderSidebar();
+        renderEvolutionViewPreserveFocus();
+      });
+      const clearVisible = document.createElement("button");
+      clearVisible.type = "button";
+      clearVisible.className = "evo-btn";
+      clearVisible.textContent = "Clear visible";
+      clearVisible.addEventListener("click", () => {
+        visible.forEach((task) => {
+          if (task?.taskId) {
+            state.selectedTaskIds.delete(task.taskId);
+          }
+        });
+        persistSelectedTaskIds();
+        renderSidebar();
+        renderEvolutionViewPreserveFocus();
+      });
+      actions.appendChild(selectVisible);
+      actions.appendChild(clearVisible);
+      tasksBlock.appendChild(actions);
+
+      visible.slice(0, 100).forEach((task) => {
+        const row = document.createElement("div");
+        row.className = "evo-task-row";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = state.selectedTaskIds.has(task.taskId);
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) {
+            state.selectedTaskIds.add(task.taskId);
+          } else {
+            state.selectedTaskIds.delete(task.taskId);
+            if (state.activeTaskId === task.taskId) {
+              state.activeTaskId = null;
+            }
+            if (state.focusedTaskId === task.taskId) {
+              state.focusedTaskId = null;
+            }
+          }
+          persistSelectedTaskIds();
+          renderSidebar();
+          renderEvolutionViewPreserveFocus();
+        });
+        row.appendChild(checkbox);
+
+        const info = document.createElement("div");
+        info.className = "evo-task-info";
+        const title = document.createElement("div");
+        title.className = "evo-task-title";
+        title.textContent = taskDisplayTitle(task, 100) || task.taskId || "Task";
+        const meta = document.createElement("div");
+        meta.className = "evo-task-meta";
+        const toolCount = Array.isArray(task.toolCalls) ? task.toolCalls.length : 0;
+        meta.textContent = `${formatClockTime(task.startTs)} · ${toolCount} tool${toolCount === 1 ? "" : "s"}`;
+        info.appendChild(title);
+        info.appendChild(meta);
+        row.appendChild(info);
+
+        const open = document.createElement("button");
+        open.type = "button";
+        open.className = "evo-open";
+        open.textContent = "Open";
+        open.addEventListener("click", () => {
+          focusTask(task);
+          setMainView("task");
+        });
+        row.appendChild(open);
+
+        tasksList.appendChild(row);
+      });
+
+      if (visible.length > 100) {
+        const more = document.createElement("div");
+        more.className = "evo-list-more";
+        more.textContent = `Showing 100/${visible.length}. Narrow search to see more.`;
+        tasksList.appendChild(more);
+      }
+    }
+  }
+  tasksBlock.appendChild(tasksList);
+  runnerBody.appendChild(tasksBlock);
+
+  const configBlock = document.createElement("div");
+  configBlock.className = "evo-block";
+  const configTop = document.createElement("div");
+  configTop.className = "evo-block-top";
   const configTitle = document.createElement("div");
-  configTitle.className = "evo-card-title";
-  configTitle.textContent = "Scope";
+  configTitle.className = "evo-block-title";
+  configTitle.textContent = "Analyzer";
   const configMeta = document.createElement("div");
-  configMeta.className = "evo-card-meta";
-  configMeta.textContent = "Tune the analyzer before you run.";
-  configHeader.appendChild(configTitle);
-  configHeader.appendChild(configMeta);
-  configCard.appendChild(configHeader);
+  configMeta.className = "evo-block-meta";
+  configMeta.textContent = "Dimensions, targets, options";
+  configTop.appendChild(configTitle);
+  configTop.appendChild(configMeta);
+  configBlock.appendChild(configTop);
 
-  const dimGroup = document.createElement("div");
-  dimGroup.className = "evo-group";
-  const dimLabel = document.createElement("div");
-  dimLabel.className = "evo-group-title";
-  dimLabel.textContent = "Dimensions";
-  dimGroup.appendChild(dimLabel);
-  const dimRow = document.createElement("div");
-  dimRow.className = "evo-chip-row";
+  const makeToggle = (label, checked, onChange) => {
+    const wrapper = document.createElement("label");
+    wrapper.className = "evo-toggle";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.checked = checked;
+    input.addEventListener("change", () => {
+      onChange(input.checked);
+      renderEvolutionViewPreserveFocus();
+    });
+    const span = document.createElement("span");
+    span.textContent = label;
+    wrapper.appendChild(input);
+    wrapper.appendChild(span);
+    return wrapper;
+  };
+
+  const dimWrap = document.createElement("div");
+  dimWrap.className = "evo-toggle-wrap";
   Object.keys(DIMENSION_LABELS).forEach((key) => {
-    dimRow.appendChild(
-      makeChip(formatDimensionLabel(key), state.evolutionDimensions.has(key), () => {
-        if (state.evolutionDimensions.has(key)) {
-          state.evolutionDimensions.delete(key);
-        } else {
+    dimWrap.appendChild(
+      makeToggle(formatDimensionLabel(key), state.evolutionDimensions.has(key), (on) => {
+        if (on) {
           state.evolutionDimensions.add(key);
+        } else {
+          state.evolutionDimensions.delete(key);
         }
         persistStringSet(EVOLUTION_DIMENSIONS_KEY, state.evolutionDimensions);
-        renderEvolutionView();
       }),
     );
   });
-  dimGroup.appendChild(dimRow);
-  configCard.appendChild(dimGroup);
+  configBlock.appendChild(dimWrap);
 
-  const targetGroup = document.createElement("div");
-  targetGroup.className = "evo-group";
-  const targetLabel = document.createElement("div");
-  targetLabel.className = "evo-group-title";
-  targetLabel.textContent = "Change targets";
-  targetGroup.appendChild(targetLabel);
-  const targetRow = document.createElement("div");
-  targetRow.className = "evo-chip-row";
+  const targetWrap = document.createElement("div");
+  targetWrap.className = "evo-toggle-wrap";
   Object.keys(CHANGE_TARGET_LABELS).forEach((key) => {
-    targetRow.appendChild(
-      makeChip(formatChangeTargetLabel(key), state.evolutionChangeTargets.has(key), () => {
-        if (state.evolutionChangeTargets.has(key)) {
-          state.evolutionChangeTargets.delete(key);
-        } else {
+    targetWrap.appendChild(
+      makeToggle(formatChangeTargetLabel(key), state.evolutionChangeTargets.has(key), (on) => {
+        if (on) {
           state.evolutionChangeTargets.add(key);
+        } else {
+          state.evolutionChangeTargets.delete(key);
         }
         persistStringSet(EVOLUTION_CHANGE_TARGETS_KEY, state.evolutionChangeTargets);
-        renderEvolutionView();
       }),
     );
   });
-  targetGroup.appendChild(targetRow);
-  configCard.appendChild(targetGroup);
+  configBlock.appendChild(targetWrap);
 
-  const optionGroup = document.createElement("div");
-  optionGroup.className = "evo-group";
-  const optionLabel = document.createElement("div");
-  optionLabel.className = "evo-group-title";
-  optionLabel.textContent = "Options";
-  optionGroup.appendChild(optionLabel);
-  const optionRow = document.createElement("div");
-  optionRow.className = "evo-chip-row";
-  optionRow.appendChild(
-    makeChip("Search for fixes (web/X)", state.evolutionUseSearch, () => {
-      state.evolutionUseSearch = !state.evolutionUseSearch;
+  const optionsWrap = document.createElement("div");
+  optionsWrap.className = "evo-toggle-wrap";
+  optionsWrap.appendChild(
+    makeToggle("Search for fixes (web/X)", state.evolutionUseSearch, (on) => {
+      state.evolutionUseSearch = on;
       persistBoolean(EVOLUTION_USE_SEARCH_KEY, state.evolutionUseSearch);
-      renderEvolutionView();
     }),
   );
-  optionGroup.appendChild(optionRow);
-  configCard.appendChild(optionGroup);
+  configBlock.appendChild(optionsWrap);
+  runnerBody.appendChild(configBlock);
 
-  composerGrid.appendChild(configCard);
-
-  const runCard = document.createElement("section");
-  runCard.className = "evo-card evo-card-run";
-
-  const runHeader = document.createElement("div");
-  runHeader.className = "evo-card-header";
-  const runTitle = document.createElement("div");
-  runTitle.className = "evo-card-title";
-  runTitle.textContent = "Run";
-  const runMeta = document.createElement("div");
-  runMeta.className = "evo-card-meta";
-  runMeta.textContent = "Generate a report + suggested patches.";
-  runHeader.appendChild(runTitle);
-  runHeader.appendChild(runMeta);
-  runCard.appendChild(runHeader);
+  const runBlock = document.createElement("div");
+  runBlock.className = "evo-run-block";
 
   const dimCount = state.evolutionDimensions.size;
   const targetCount = state.evolutionChangeTargets.size;
@@ -1871,209 +2275,42 @@ function renderEvolutionView() {
   runButton.textContent = state.evolutionRunning ? "Analyzing…" : "Run evolution analysis";
   runButton.disabled = !canRun;
   runButton.addEventListener("click", runEvolutionAnalysis);
-  runCard.appendChild(runButton);
+  runBlock.appendChild(runButton);
 
-  const runHint = document.createElement("div");
-  runHint.className = "evo-hint";
+  const hint = document.createElement("div");
+  hint.className = "evo-hint";
   if (!selectedTaskIds.length) {
-    runHint.textContent = "Select 1+ tasks to enable running.";
+    hint.textContent = "Select 1+ tasks to enable running.";
   } else if (!dimCount || !targetCount) {
-    runHint.textContent = "Pick at least one dimension and one target.";
+    hint.textContent = "Pick at least one dimension and one target.";
   } else {
-    runHint.textContent = "Reports are stored locally and remain browsable as history.";
+    hint.textContent = "New reports appear in the left history sidebar.";
   }
-  runCard.appendChild(runHint);
+  runBlock.appendChild(hint);
 
   if (state.evolutionNotice) {
     const notice = document.createElement("div");
     notice.className = "evo-notice";
     notice.textContent = state.evolutionNotice;
-    runCard.appendChild(notice);
+    runBlock.appendChild(notice);
   }
 
-  composerGrid.appendChild(runCard);
-  evolutionControlsEl.appendChild(composerGrid);
+  runnerBody.appendChild(runBlock);
+  runner.appendChild(runnerBody);
+  workbench.appendChild(runner);
 
-  const grid = document.createElement("div");
-  grid.className = "evo-grid";
+  const reportPane = document.createElement("section");
+  reportPane.className = "evo-report";
 
-  const historyPane = document.createElement("section");
-  historyPane.className = "evo-pane evo-history";
-
-  const historyHeader = document.createElement("div");
-  historyHeader.className = "evo-pane-header";
-  const historyTitle = document.createElement("div");
-  historyTitle.className = "evo-pane-title";
-  historyTitle.textContent = "History";
-
-  const scopeControls = document.createElement("div");
-  scopeControls.className = "evo-scope";
-  const allScope = document.createElement("button");
-  allScope.type = "button";
-  allScope.className = `evo-scope-btn${state.evolutionHistoryScope === "all" ? " active" : ""}`;
-  allScope.textContent = "All";
-  allScope.addEventListener("click", () => {
-    state.evolutionHistoryScope = "all";
-    persistString(EVOLUTION_HISTORY_SCOPE_KEY, state.evolutionHistoryScope);
-    renderEvolutionView();
-  });
-  const selScope = document.createElement("button");
-  selScope.type = "button";
-  selScope.className = `evo-scope-btn${
-    state.evolutionHistoryScope === "selection" ? " active" : ""
-  }`;
-  selScope.textContent = "Selection";
-  selScope.disabled = selectedTaskIds.length === 0;
-  selScope.title = selectedTaskIds.length === 0 ? "Select tasks first" : "";
-  selScope.addEventListener("click", () => {
-    state.evolutionHistoryScope = "selection";
-    persistString(EVOLUTION_HISTORY_SCOPE_KEY, state.evolutionHistoryScope);
-    renderEvolutionView();
-  });
-  scopeControls.appendChild(allScope);
-  scopeControls.appendChild(selScope);
-
-  historyHeader.appendChild(historyTitle);
-  historyHeader.appendChild(scopeControls);
-  historyPane.appendChild(historyHeader);
-
-  const historyTools = document.createElement("div");
-  historyTools.className = "evo-pane-tools";
-  const searchWrap = document.createElement("label");
-  searchWrap.className = "evo-search";
-  const searchInput = document.createElement("input");
-  searchInput.id = "evo-history-search";
-  searchInput.type = "search";
-  searchInput.placeholder = "Search reports, tasks, findings…";
-  searchInput.value = state.evolutionHistoryQuery;
-  searchInput.addEventListener("input", () => {
-    state.evolutionHistoryQuery = searchInput.value;
-    renderEvolutionViewPreserveFocus();
-  });
-  searchWrap.appendChild(searchInput);
-  historyTools.appendChild(searchWrap);
-  historyPane.appendChild(historyTools);
-
-  const query = state.evolutionHistoryQuery.trim().toLowerCase();
-  const selectionFilter =
-    state.evolutionHistoryScope === "selection" && selectedTaskIds.length > 0;
-
-  const filteredReports = state.evolutionReports.filter((report) => {
-    if (selectionFilter && !reportMatchesTaskSelection(report, selectedTaskIds)) {
-      return false;
-    }
-    if (query && !evolutionReportSearchText(report).includes(query)) {
-      return false;
-    }
-    return true;
-  });
-
-  if (filteredReports.length > 0) {
-    const activeId = state.evolutionActiveReportId;
-    if (!activeId || !filteredReports.some((report) => report?.reportId === activeId)) {
-      state.evolutionActiveReportId = filteredReports[0].reportId ?? null;
-      persistString(EVOLUTION_ACTIVE_REPORT_KEY, state.evolutionActiveReportId ?? "");
-      state.evolutionOpenItemIds = new Set();
-    }
-  } else if (
-    !state.evolutionActiveReportId ||
-    !state.evolutionReports.some((report) => report?.reportId === state.evolutionActiveReportId)
-  ) {
+  if (!activeReport && state.evolutionReports.length > 0) {
     ensureEvolutionActiveReportId(state.evolutionReports);
   }
+  const report = getEvolutionReportById(state.evolutionActiveReportId);
 
-  const list = document.createElement("div");
-  list.className = "evo-report-list";
-  if (state.evolutionReports.length === 0) {
-    list.appendChild(createEmptyState("No evolution reports yet. Run analysis to create the first one."));
-  } else if (filteredReports.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "evo-empty";
-    empty.textContent = "No reports match the current filter.";
-    list.appendChild(empty);
-  } else {
-    filteredReports.forEach((report, idx) => {
-      const row = document.createElement("button");
-      row.type = "button";
-      const isActive = report.reportId === state.evolutionActiveReportId;
-      row.className = `evo-report-row${isActive ? " active" : ""}`;
-      row.style.setProperty("--index", String(idx));
-      row.addEventListener("click", () => {
-        if (state.evolutionActiveReportId === report.reportId) {
-          return;
-        }
-        state.evolutionActiveReportId = report.reportId;
-        persistString(EVOLUTION_ACTIVE_REPORT_KEY, state.evolutionActiveReportId ?? "");
-        state.evolutionOpenItemIds = new Set();
-        renderEvolutionView();
-      });
-
-      const top = document.createElement("div");
-      top.className = "evo-report-top";
-      const title = document.createElement("div");
-      title.className = "evo-report-title";
-      title.textContent = truncateText(report.summary || "Evolution report", 80);
-      const time = document.createElement("div");
-      time.className = "evo-report-time";
-      time.textContent = formatTaskTime(report.createdAt);
-      top.appendChild(title);
-      top.appendChild(time);
-      row.appendChild(top);
-
-      const mid = document.createElement("div");
-      mid.className = "evo-report-mid";
-      const dims = (report.dimensions || []).map(formatDimensionLabel).join(" · ");
-      const targets = (report.changeTargets || []).map(formatChangeTargetLabel).join(" · ");
-      const searchFlag = report.useSearch ? "search:on" : "search:off";
-      mid.textContent = `${dims || "no dimensions"} · ${targets || "no targets"} · ${searchFlag}`;
-      row.appendChild(mid);
-
-      const chips = document.createElement("div");
-      chips.className = "evo-report-chips";
-
-      const chip = (text, tone) => {
-        const span = document.createElement("span");
-        span.className = `evo-badge tone-${tone || "muted"}`;
-        span.textContent = text;
-        return span;
-      };
-
-      const itemCount = Array.isArray(report.items) ? report.items.length : 0;
-      const changeCount = countEvolutionReportChanges(report);
-      chips.appendChild(chip(`${itemCount} items`, "muted"));
-      chips.appendChild(chip(`${changeCount} changes`, "accent"));
-
-      const matchesSelection =
-        selectedTaskIds.length > 0 && reportMatchesTaskSelection(report, selectedTaskIds);
-      if (state.evolutionHistoryScope === "all" && matchesSelection) {
-        chips.appendChild(chip("matches selection", "success"));
-      }
-      if (report.parseError) {
-        chips.appendChild(chip("parse error", "danger"));
-      }
-      row.appendChild(chips);
-
-      list.appendChild(row);
-    });
-  }
-
-  const historyFooter = document.createElement("div");
-  historyFooter.className = "evo-pane-footer";
-  const shown = filteredReports.length;
-  const total = state.evolutionReports.length;
-  historyFooter.textContent = total ? `${shown}/${total} shown` : "";
-  historyPane.appendChild(list);
-  historyPane.appendChild(historyFooter);
-
-  grid.appendChild(historyPane);
-
-  const detailPane = document.createElement("section");
-  detailPane.className = "evo-pane evo-detail";
-  const activeReport = getEvolutionReportById(state.evolutionActiveReportId);
-  if (!activeReport) {
-    detailPane.appendChild(createEmptyState("Select a report to view details."));
-    grid.appendChild(detailPane);
-    evolutionContentEl.appendChild(grid);
+  if (!report) {
+    reportPane.appendChild(createEmptyState("Select a report from the history sidebar."));
+    workbench.appendChild(reportPane);
+    evolutionContentEl.appendChild(workbench);
     return;
   }
 
@@ -2081,15 +2318,15 @@ function renderEvolutionView() {
   detailHeader.className = "evo-detail-header";
   const detailTitle = document.createElement("h4");
   detailTitle.className = "evo-detail-title";
-  detailTitle.textContent = activeReport.summary || "Evolution report";
+  detailTitle.textContent = report.summary || "Evolution report";
   detailHeader.appendChild(detailTitle);
 
   const detailMeta = document.createElement("div");
   detailMeta.className = "evo-detail-meta";
-  const detailDims = (activeReport.dimensions || []).map(formatDimensionLabel).join(" · ");
-  const detailTargets = (activeReport.changeTargets || []).map(formatChangeTargetLabel).join(" · ");
-  const detailSearchFlag = activeReport.useSearch ? "search:on" : "search:off";
-  detailMeta.textContent = `${formatTaskTime(activeReport.createdAt)} · ${detailDims || "no dimensions"} · ${
+  const detailDims = (report.dimensions || []).map(formatDimensionLabel).join(" · ");
+  const detailTargets = (report.changeTargets || []).map(formatChangeTargetLabel).join(" · ");
+  const detailSearchFlag = report.useSearch ? "search:on" : "search:off";
+  detailMeta.textContent = `${formatTaskTime(report.createdAt)} · ${detailDims || "no dimensions"} · ${
     detailTargets || "no targets"
   } · ${detailSearchFlag}`;
   detailHeader.appendChild(detailMeta);
@@ -2102,16 +2339,16 @@ function renderEvolutionView() {
   selectTasksBtn.className = "evo-action";
   selectTasksBtn.textContent = "Select these tasks";
   selectTasksBtn.addEventListener("click", () => {
-    const nextIds = Array.isArray(activeReport.taskIds)
-      ? activeReport.taskIds.filter((id) => typeof id === "string" && state.tasksById.has(id))
+    const nextIds = Array.isArray(report.taskIds)
+      ? report.taskIds.filter((id) => typeof id === "string" && state.tasksById.has(id))
       : [];
     state.selectedTaskIds = new Set(nextIds);
     state.activeTaskId = null;
     state.focusedTaskId = null;
     persistSelectedTaskIds();
-    renderSessions();
+    renderSidebar();
     updateActiveSessionCard();
-    renderEvolutionView();
+    renderEvolutionViewPreserveFocus();
   });
   detailActions.appendChild(selectTasksBtn);
 
@@ -2120,31 +2357,32 @@ function renderEvolutionView() {
   copyBtn.className = "evo-action";
   copyBtn.textContent = "Copy report JSON";
   copyBtn.addEventListener("click", async () => {
-    const ok = await copyToClipboard(JSON.stringify(activeReport, null, 2));
+    const ok = await copyToClipboard(JSON.stringify(report, null, 2));
     showToast(ok ? "Copied report JSON." : "Copy failed.");
   });
   detailActions.appendChild(copyBtn);
 
   detailHeader.appendChild(detailActions);
-  detailPane.appendChild(detailHeader);
+  reportPane.appendChild(detailHeader);
 
   const detailBody = document.createElement("div");
+  detailBody.id = "evo-detail-body";
   detailBody.className = "evo-detail-body";
 
-  if (activeReport.parseError) {
+  if (report.parseError) {
     const callout = document.createElement("div");
     callout.className = "evo-callout danger";
-    callout.textContent = activeReport.parseError;
+    callout.textContent = report.parseError;
     detailBody.appendChild(callout);
   }
 
-  if (activeReport.ruleEngine && (activeReport.ruleEngine.matchedRuleIds || []).length > 0) {
+  if (report.ruleEngine && (report.ruleEngine.matchedRuleIds || []).length > 0) {
     const callout = document.createElement("div");
     callout.className = "evo-callout";
-    const matched = activeReport.ruleEngine.matchedRuleIds.length;
+    const matched = report.ruleEngine.matchedRuleIds.length;
     const lines = [`Rule engine: ${matched} rule${matched === 1 ? "" : "s"} matched.`];
-    if (activeReport.ruleEngine.overridePaths && activeReport.ruleEngine.overridePaths.length > 0) {
-      lines.push(`Overrides: ${activeReport.ruleEngine.overridePaths.join(", ")}`);
+    if (report.ruleEngine.overridePaths && report.ruleEngine.overridePaths.length > 0) {
+      lines.push(`Overrides: ${report.ruleEngine.overridePaths.join(", ")}`);
     }
     callout.textContent = lines.join(" ");
     detailBody.appendChild(callout);
@@ -2152,7 +2390,7 @@ function renderEvolutionView() {
 
   const taskIdsWrap = document.createElement("div");
   taskIdsWrap.className = "evo-taskids";
-  (activeReport.taskIds || []).forEach((taskId) => {
+  (report.taskIds || []).forEach((taskId) => {
     const task = state.tasksById.get(taskId);
     const chip = document.createElement("button");
     chip.type = "button";
@@ -2168,7 +2406,7 @@ function renderEvolutionView() {
   });
   detailBody.appendChild(taskIdsWrap);
 
-  const items = Array.isArray(activeReport.items) ? activeReport.items : [];
+  const items = Array.isArray(report.items) ? report.items : [];
   if (items.length === 0) {
     detailBody.appendChild(createEmptyState("This report contains no items."));
   } else {
@@ -2296,7 +2534,7 @@ function renderEvolutionView() {
           const applied = state.appliedChanges.has(change.changeId);
           apply.textContent = applied ? "Applied" : "Apply change";
           apply.disabled = applied || state.applyingChanges.has(change.changeId);
-          apply.addEventListener("click", () => applyEvolutionChange(activeReport.reportId, change.changeId));
+          apply.addEventListener("click", () => applyEvolutionChange(report.reportId, change.changeId));
           changeCard.appendChild(apply);
 
           changeList.appendChild(changeCard);
@@ -2310,22 +2548,21 @@ function renderEvolutionView() {
     detailBody.appendChild(itemList);
   }
 
-  if (activeReport.rawResponse) {
+  if (report.rawResponse) {
     const raw = document.createElement("details");
     raw.className = "evo-raw";
     const sum = document.createElement("summary");
     sum.textContent = "Raw response";
     raw.appendChild(sum);
     const pre = document.createElement("pre");
-    pre.textContent = activeReport.rawResponse;
+    pre.textContent = report.rawResponse;
     raw.appendChild(pre);
     detailBody.appendChild(raw);
   }
 
-  detailPane.appendChild(detailBody);
-
-  grid.appendChild(detailPane);
-  evolutionContentEl.appendChild(grid);
+  reportPane.appendChild(detailBody);
+  workbench.appendChild(reportPane);
+  evolutionContentEl.appendChild(workbench);
 }
 
 function eventMatchesSearch(event, search) {
@@ -2632,7 +2869,7 @@ async function loadSessions() {
   const res = await fetch("/api/sessions");
   const data = await res.json();
   state.sessions = data.sessions || [];
-  renderSessions();
+  renderSidebar();
   updateActiveSessionCard();
 }
 
@@ -2660,14 +2897,14 @@ async function loadTasks() {
     state.tasksById = byId;
     pruneSelectedTaskIds();
     state.tasksLoaded = true;
-    renderSessions();
+    renderSidebar();
     updateActiveSessionCard();
     renderDetailPanel();
     renderEvolutionView();
     renderTimeline();
   } catch {
     state.tasksLoaded = true;
-    renderSessions();
+    renderSidebar();
     renderEvolutionView();
     renderTimeline();
   }
@@ -2686,12 +2923,12 @@ async function loadAnalyses() {
     });
     state.analysesByTask = byTask;
     state.analysesLoaded = true;
-    renderSessions();
+    renderSidebar();
     renderDetailPanel();
     renderEvolutionView();
   } catch {
     state.analysesLoaded = true;
-    renderSessions();
+    renderSidebar();
     renderDetailPanel();
     renderEvolutionView();
   }
@@ -2703,8 +2940,10 @@ async function loadEvolutionReports() {
     const data = await res.json();
     const reports = Array.isArray(data.reports) ? data.reports : [];
     state.evolutionReports = reports;
+    renderSidebar();
     renderEvolutionView();
   } catch {
+    renderSidebar();
     renderEvolutionView();
   }
 }
@@ -2746,6 +2985,7 @@ async function runEvolutionAnalysis() {
     state.evolutionNotice = "Evolution analysis failed.";
   } finally {
     state.evolutionRunning = false;
+    renderSidebar();
     renderEvolutionView();
   }
 }
@@ -3121,8 +3361,13 @@ viewTabs.forEach((tab) => {
 if (sessionSearchEl) {
   sessionSearchEl.addEventListener("input", (event) => {
     const target = event.target;
-    state.sessionSearch = target.value || "";
-    renderSessions();
+    const value = target.value || "";
+    if (state.mainView === "evolution") {
+      state.evolutionHistoryQuery = value;
+    } else {
+      state.sessionSearch = value;
+    }
+    renderSidebar();
   });
 }
 
