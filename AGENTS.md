@@ -14,24 +14,17 @@ This repository contains **Evolve My Claw**, an external timeline and evolution 
 
 - OpenClaw source repo: https://github.com/openclaw/openclaw
 - Keep a local clone of OpenClaw available for reference when changing this repo's code (schemas, session log formats, gateway events, config behavior, etc.).
-- Prefer a sibling checkout:
-
-```bash
-cd ..
-git clone https://github.com/openclaw/openclaw.git openclaw
-```
-
-- Alternatively, clone into a temp folder:
-
-```bash
-git clone https://github.com/openclaw/openclaw.git "${TMPDIR:-/tmp}/openclaw"
-```
-
-- Alternatively, keep the clone inside this repo (gitignored):
+- Keep the clone inside this repo (gitignored) at `./.tmp/openclaw`:
 
 ```bash
 mkdir -p .tmp
 git clone https://github.com/openclaw/openclaw.git .tmp/openclaw
+```
+
+- When you need to reference OpenClaw code, update it to the latest commit first:
+
+```bash
+git -C .tmp/openclaw pull --ff-only
 ```
 
 - Treat the OpenClaw clone as read-only unless explicitly requested to modify OpenClaw itself.
