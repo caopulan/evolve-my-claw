@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { Command } from "commander";
 import { resolveOpenClawStateDir, resolveTelemetryDir, ensureDir } from "./paths.js";
 import { startServer } from "./server/server.js";
@@ -25,12 +26,50 @@ program
   .option("--host <host>", "Host to bind", "127.0.0.1")
   .option("--port <port>", "Port to bind", "4797")
   .option("--state-dir <dir>", "OpenClaw state dir override")
+  .option("--daemon", "Run server in background (detached)")
+  .option("--pid-file <file>", "PID file path (daemon mode)")
+  .option("--log-file <file>", "Log file path (daemon mode)")
   .action(async (opts) => {
     const stateDir = opts.stateDir ? path.resolve(opts.stateDir) : resolveOpenClawStateDir();
     const host = String(opts.host ?? "127.0.0.1");
     const port = Number.parseInt(String(opts.port ?? "4797"), 10);
-    await startServer({ host, port: Number.isFinite(port) ? port : 4797, stateDir });
-    console.log(`evolve-my-claw: UI ready at http://${host}:${Number.isFinite(port) ? port : 4797}`);
+
+    const resolvedPort = Number.isFinite(port) ? port : 4797;
+
+    // In some environments, background processes started by tooling can be reaped when the
+    // parent command exits. Daemon mode spawns a detached child so the server survives.
+    const daemon = Boolean(opts.daemon) && process.env.EMC_DAEMON_CHILD !== "1";
+    if (daemon) {
+      const defaultPidFile = path.join(resolveTelemetryDir(stateDir), "serve.pid");
+      const defaultLogFile = path.join(resolveTelemetryDir(stateDir), "serve.log");
+      const pidFile = opts.pidFile ? path.resolve(String(opts.pidFile)) : defaultPidFile;
+      const logFile = opts.logFile ? path.resolve(String(opts.logFile)) : defaultLogFile;
+
+      ensureDir(path.dirname(pidFile));
+      ensureDir(path.dirname(logFile));
+
+      const out = fs.openSync(logFile, "a");
+      const child = spawn(
+        process.execPath,
+        [path.join(process.cwd(), "dist", "cli.js"), "serve", "--host", host, "--port", String(resolvedPort), "--state-dir", stateDir],
+        {
+          detached: true,
+          stdio: ["ignore", out, out],
+          env: { ...process.env, EMC_DAEMON_CHILD: "1" },
+        },
+      );
+      child.unref();
+      fs.writeFileSync(pidFile, `${child.pid}\n`, "utf8");
+
+      console.log(`evolve-my-claw: daemon started (pid ${child.pid})`);
+      console.log(`evolve-my-claw: logs -> ${logFile}`);
+      console.log(`evolve-my-claw: pid  -> ${pidFile}`);
+      console.log(`evolve-my-claw: UI ready at http://${host}:${resolvedPort}`);
+      return;
+    }
+
+    await startServer({ host, port: resolvedPort, stateDir });
+    console.log(`evolve-my-claw: UI ready at http://${host}:${resolvedPort}`);
   });
 
 program
