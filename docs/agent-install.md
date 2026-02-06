@@ -125,6 +125,18 @@ node dist/cli.js evolution
 
 每条修改建议可在 UI 中点击执行（安全的配置 merge patch + 文件修改）。
 
+## 规则驱动改进（推荐）
+
+Evolution 分析会先用确定性规则从 task 日志里抽取证据与改进候选（seed items），再交给 LLM 补全与排序。
+
+- 内置规则: `evolve-my-claw/rules/builtin.rules.json5`
+- 本机覆盖（无需改 repo）: `~/.openclaw/evolve-my-claw/rules/*.json5`
+
+提示:
+
+- 你可以用相同 `ruleId` 覆盖内置规则, 或设置 `"enabled": false` 禁用它。
+- 规则里不要写入任何 secret 值（token/password/apiKey 等）。
+
 ## 常见参数
 
 - `--state-dir <dir>`：指定 OpenClaw 状态目录

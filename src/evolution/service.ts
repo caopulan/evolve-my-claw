@@ -189,6 +189,7 @@ export async function runEvolutionAnalysis(params: {
     const report = await analyzeEvolutionReport({
       tasks,
       client,
+      stateDir,
       analysisAgentId: params.analysisAgentId,
       timeoutSeconds,
       dimensions: params.dimensions,

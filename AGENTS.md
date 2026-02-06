@@ -20,6 +20,7 @@ Task-first telemetry for OpenClaw—merge subagents, visualize timelines, drive 
 - **Task analysis**: `emc analyze` sends each candidate to an OpenClaw agent and writes `~/.openclaw/evolve-my-claw/tasks.analysis.jsonl` with structured JSON analysis.
 - **Event capture**: `emc capture` connects to the gateway and appends agent events to `~/.openclaw/evolve-my-claw/agent-events.jsonl`.
 - **Timeline UI**: `emc serve` reads local session logs + optional captured events and serves a timeline viewer.
+- **Rule-driven evolution**: evolution analysis first matches deterministic rules (evidence + seed changes), then asks an OpenClaw agent to refine the final report. Built-in rules live in `rules/builtin.rules.json5`; per-device overrides live in `~/.openclaw/evolve-my-claw/rules/*.json5`.
 
 ## Config (JSON)
 

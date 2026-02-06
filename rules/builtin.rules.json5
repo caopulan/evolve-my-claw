@@ -1,0 +1,121 @@
+// Built-in evolution rules for Evolve My Claw.
+//
+// This is intentionally a small, opinionated starter ruleset. Extend it as you
+// observe repeated failure patterns in tasks.
+//
+// Local overrides (per device) live at:
+//   ~/.openclaw/evolve-my-claw/rules/*.json5
+//
+// Schema:
+// {
+//   schemaVersion: 1,
+//   rules: EvolutionRule[]
+// }
+{
+  schemaVersion: 1,
+  rules: [
+    {
+      ruleId: "tools.web.search.missing_brave_api_key",
+      enabled: true,
+      title: "web_search 缺少 Brave API key (会导致在线搜索失败)",
+      scope: "task",
+      severity: "high",
+      match: "any",
+      triggers: [
+        { kind: "tool_error_code", toolName: "web_search", error: "missing_brave_api_key" },
+      ],
+      actions: [
+        {
+          kind: "openclaw_config_merge_patch",
+          summary: "临时禁用 web_search 避免重复失败",
+          reason: "当前环境缺少 Brave Search API key，web_search 会反复返回 missing_brave_api_key。",
+          requiresRestart: true,
+          patch: { tools: { web: { search: { enabled: false, provider: "brave" } } } },
+        },
+        {
+          kind: "create_managed_skill",
+          skillId: "web-search-preflight",
+          overwrite: false,
+          summary: "新增技能: web-search-preflight (诊断 web_search 配置与 fallback)",
+          reason: "把常见的 web_search 失败模式与替代方案固化为技能，减少重复踩坑。",
+          content: "---\nname: web-search-preflight\ndescription: Diagnose web_search API key issues and apply safe fallbacks.\nmetadata: { \"openclaw\": { \"emoji\": \"\\uD83D\\uDD0E\" } }\n---\n\n# web-search-preflight\n\nUse this skill when `web_search` fails (e.g. missing API keys) and you need a reliable fallback.\n\n## What to detect\n\n- If `web_search` returns `missing_brave_api_key`:\n  - Tell the user to configure web search (`openclaw configure --section web`) or set `BRAVE_API_KEY` in the Gateway environment.\n  - Until configured, avoid calling `web_search` again in this session.\n- If `web_search` returns `missing_perplexity_api_key`:\n  - Tell the user to set `PERPLEXITY_API_KEY` (or `OPENROUTER_API_KEY`) depending on provider.\n\n## Safe fallbacks (no web_search)\n\n- Prefer the `browser` tool to navigate to official sources.\n- Prefer `web_fetch` when a URL is known.\n- When the user asks for citations, explicitly cite the source URL you opened.\n\n## Agent behavior\n\n- Be explicit about what failed and why.\n- Do not invent results when search is unavailable.\n",
+        },
+        {
+          kind: "user_action",
+          title: "配置 Brave Search API key (启用 web_search)",
+          reason:
+            "没有 Brave Search API key 时，`web_search` 无法工作。你可以选择配置 API key 后重新启用。",
+          steps: [
+            "运行 `openclaw configure --section web`，启用 web_search 并粘贴 Brave Search API key。",
+            "或在网关环境变量中设置 `BRAVE_API_KEY` (不改配置文件)。",
+            "完成后，把 `tools.web.search.enabled` 设回 true (或删除该键让 OpenClaw 自动检测)。",
+          ],
+        },
+      ],
+    },
+    {
+      ruleId: "tools.web.search.missing_perplexity_api_key",
+      enabled: true,
+      title: "web_search 缺少 Perplexity/OpenRouter API key",
+      scope: "task",
+      severity: "high",
+      match: "any",
+      triggers: [
+        { kind: "tool_error_code", toolName: "web_search", error: "missing_perplexity_api_key" },
+      ],
+      actions: [
+        {
+          kind: "openclaw_config_merge_patch",
+          summary: "临时禁用 web_search 避免重复失败",
+          reason: "当前环境缺少 Perplexity/OpenRouter API key，web_search 会反复失败。",
+          requiresRestart: true,
+          patch: { tools: { web: { search: { enabled: false, provider: "perplexity" } } } },
+        },
+        {
+          kind: "user_action",
+          title: "配置 Perplexity/OpenRouter API key (启用 web_search)",
+          reason:
+            "当 web_search provider=perplexity 时，需要 PERPLEXITY_API_KEY 或 OPENROUTER_API_KEY。",
+          steps: [
+            "运行 `openclaw configure --section web`，将 provider 设为 perplexity 并配置 key。",
+            "或在网关环境变量中设置 `PERPLEXITY_API_KEY` / `OPENROUTER_API_KEY`。",
+            "完成后，把 `tools.web.search.enabled` 设回 true (或删除该键让 OpenClaw 自动检测)。",
+          ],
+        },
+      ],
+    },
+    {
+      ruleId: "tools.browser.snapshot.aria_selector_unsupported",
+      enabled: true,
+      title: "browser snapshot: refs=aria + selector 不支持 (导致误导性错误)",
+      scope: "task",
+      severity: "medium",
+      match: "any",
+      triggers: [
+        {
+          kind: "tool_result_regex",
+          toolName: "browser",
+          pattern: "refs=aria does not support selector/frame snapshots yet",
+          flags: "i",
+        },
+      ],
+      actions: [
+        {
+          kind: "create_managed_skill",
+          skillId: "browser-snapshot-gotchas",
+          overwrite: false,
+          summary: "新增技能: browser-snapshot-gotchas (常见参数坑位与替代用法)",
+          reason: "将 browser snapshot 常见失败模式固化为技能，减少重复试错。",
+          content: "---\nname: browser-snapshot-gotchas\ndescription: Avoid common browser snapshot parameter traps and pick working alternatives.\nmetadata: { \"openclaw\": { \"emoji\": \"\\uD83C\\uDF10\" } }\n---\n\n# browser-snapshot-gotchas\n\nUse this when `browser snapshot` returns errors like:\n\n- `refs=aria does not support selector/frame snapshots yet`\n\n## Recommended alternatives\n\n- If you need a scoped snapshot (selector-based): prefer `refs=role` instead of `refs=aria`.\n- If you need deep structure: increase `depth` gradually and keep `compact=true` first.\n- If a full-page snapshot is too noisy: navigate to a narrower URL first, then snapshot.\n\n## Agent behavior\n\n- Treat this as a tool limitation, not a gateway outage.\n- Retry with a supported parameter set before escalating.\n",
+        },
+        {
+          kind: "append_workspace_file",
+          fileName: "TOOLS.md",
+          summary: "更新 TOOLS.md: 记录 browser snapshot 的已知限制与替代参数",
+          reason: "将已知坑位写入 workspace，降低后续任务再次踩坑概率。",
+          content: "\n\n## browser snapshot gotchas\n\n- `browser snapshot` with `refs=aria` does not support selector/frame snapshots yet.\n- Prefer `refs=role` when using `selector` snapshots.\n",
+        },
+      ],
+    },
+  ],
+}

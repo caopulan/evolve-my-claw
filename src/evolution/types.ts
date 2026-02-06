@@ -70,6 +70,8 @@ export type EvolutionReportItem = {
   dimension: EvolutionDimension | "change_recommendation";
   severity: "low" | "medium" | "high";
   title: string;
+  /** Optional rule ids that this item addresses (rule-driven evolution mode). */
+  ruleIds?: string[];
   reasoning: string;
   evidence?: string;
   impact?: string;
@@ -91,6 +93,11 @@ export type EvolutionReportRecord = {
   dimensions: EvolutionDimension[];
   changeTargets: EvolutionChangeTarget[];
   useSearch?: boolean;
+  ruleEngine?: {
+    matchedRuleIds: string[];
+    builtinPath?: string;
+    overridePaths?: string[];
+  };
   summary: string;
   items: EvolutionReportItem[];
   rawResponse?: string;

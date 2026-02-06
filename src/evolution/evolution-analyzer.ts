@@ -9,6 +9,8 @@ import type {
   EvolutionReportRecord,
 } from "./types.js";
 import { loadOpenClawConfig, type OpenClawConfigRecord } from "./openclaw-config.js";
+import { loadEvolutionRuleset } from "./rules/rules-loader.js";
+import { evaluateEvolutionRules, formatRuleFindingsForPrompt } from "./rules/rules-evaluator.js";
 
 type GatewayAgentResponse = {
   runId?: string;
@@ -252,6 +254,10 @@ function buildPrompt(params: {
   workspaceContext: string;
   hooksDir: string;
   skillsDir: string;
+  rulesetBuiltinPath?: string;
+  rulesetOverridePaths: string[];
+  requiredRuleIds: string[];
+  ruleFindingsJson: string;
   useSearch: boolean;
   analysisAgentId: string;
 }): string {
@@ -276,6 +282,7 @@ function buildPrompt(params: {
     '      "dimension": "per_task_tool_quality|cross_task_patterns|change_recommendation",',
     '      "severity": "low|medium|high",',
     '      "title": string,',
+    '      "ruleIds"?: string[],',
     '      "reasoning": string,',
     '      "evidence": string,',
     '      "impact": string,',
@@ -309,6 +316,8 @@ function buildPrompt(params: {
     "- self-evolve 优先：每个 item 尽量给出 changes（至少 1 条）；总 changes 数量至少 2 条。",
     "- 只有当需要用户提供 secret（token/password/apiKey 等）时，才使用 userActions；否则不要用 userActions。",
     "- evidence 必须引用 TASKS/TOOLS 或 CONFIG/WORKSPACE_EXCERPTS 中的具体片段（比如 toolName、error、文件段落）。",
+    "- 如果 REQUIRED_RULE_IDS 非空：每个 ruleId 至少要在一个 item.ruleIds 中出现（覆盖命中规则）。",
+    "- item.ruleIds 尽量填写（可以多个）。",
     "- openclaw_config_merge_patch 使用 JSON merge patch：对象递归 merge，null 表示删除 key。",
     "- openclaw_config_merge_patch 的 patch 只能包含顶层键：meta, wizard, diagnostics, models, agents, tools, messages, commands, approvals, hooks, channels, gateway, skills, plugins, bindings, session。",
     "- 不要在 patch 或文件内容里写入任何 secret 值（token/password/secret/apiKey 等）。需要 secret 时写入 userActions。",
@@ -325,6 +334,11 @@ function buildPrompt(params: {
     `OPENCLAW_CONFIG: ${params.openclawConfigPath}`,
     "OPENCLAW_CONFIG_SNIPPET (redacted):",
     params.openclawConfigSnippet,
+    `RULESET_BUILTIN: ${params.rulesetBuiltinPath ?? "none"}`,
+    `RULESET_OVERRIDES: ${params.rulesetOverridePaths.length > 0 ? params.rulesetOverridePaths.join(", ") : "none"}`,
+    `REQUIRED_RULE_IDS: ${params.requiredRuleIds.join(", ") || "none"}`,
+    "RULE_FINDINGS_JSON:",
+    params.ruleFindingsJson || "[]",
     "EXECUTION_WORKSPACES:",
     workspaceLines,
     `MANAGED_HOOKS_DIR: ${params.hooksDir}`,
@@ -396,6 +410,7 @@ function safeCastItems(items: unknown[]): EvolutionReportRecord["items"] {
 export async function analyzeEvolutionReport(params: {
   tasks: TaskRecord[];
   client: GatewayCaptureClient;
+  stateDir: string;
   analysisAgentId: string;
   timeoutSeconds: number;
   dimensions: EvolutionDimension[];
@@ -414,6 +429,14 @@ export async function analyzeEvolutionReport(params: {
   );
   const workspaceContext = truncateText(buildWorkspaceContext(params.workspacePaths), 30_000);
 
+  const ruleset = loadEvolutionRuleset({ stateDir: params.stateDir });
+  const ruleEngine = evaluateEvolutionRules({
+    tasks: params.tasks,
+    rules: ruleset.rules,
+    context: { skillsDir: params.skillsDir, workspacePaths: params.workspacePaths },
+  });
+  const ruleFindingsJson = formatRuleFindingsForPrompt(ruleEngine.findings, 14_000);
+
   const prompt = buildPrompt({
     tasks: params.tasks,
     dimensions: params.dimensions,
@@ -425,6 +448,10 @@ export async function analyzeEvolutionReport(params: {
     workspaceContext,
     hooksDir: params.hooksDir,
     skillsDir: params.skillsDir,
+    rulesetBuiltinPath: ruleset.sources.builtinPath,
+    rulesetOverridePaths: ruleset.sources.overridePaths,
+    requiredRuleIds: ruleEngine.requiredRuleIds,
+    ruleFindingsJson,
     useSearch: params.useSearch,
     analysisAgentId: params.analysisAgentId,
   });
@@ -467,6 +494,7 @@ export async function analyzeEvolutionReport(params: {
     totalChanges: number;
     hasAtLeastThreeItems: boolean;
     missingRequiredFields: boolean;
+    missingRuleIds: string[];
   } => {
     let totalChanges = 0;
     let missingRequiredFields = false;
@@ -482,11 +510,26 @@ export async function analyzeEvolutionReport(params: {
         missingRequiredFields = true;
       }
     }
+    const requiredRuleIds = ruleEngine.requiredRuleIds;
+    const covered = new Set<string>();
+    for (const item of items) {
+      const ruleIds = Array.isArray(item.ruleIds) ? item.ruleIds : [];
+      for (const ruleId of ruleIds) {
+        if (typeof ruleId === "string" && ruleId.trim()) {
+          covered.add(ruleId.trim());
+        }
+      }
+    }
+    const missingRuleIds = requiredRuleIds.filter((ruleId) => !covered.has(ruleId));
+    if (missingRuleIds.length > 0) {
+      missingRequiredFields = true;
+    }
     return {
       hasChanges: totalChanges > 0,
       totalChanges,
       hasAtLeastThreeItems: items.length >= 3,
       missingRequiredFields,
+      missingRuleIds,
     };
   };
 
@@ -508,18 +551,42 @@ export async function analyzeEvolutionReport(params: {
       `- actionableItems: ${attempt.actionableItems.length}`,
       `- totalChanges: ${validation.totalChanges}`,
       `- missingRequiredFields: ${validation.missingRequiredFields}`,
+      `- missingRuleIds: ${validation.missingRuleIds.length ? validation.missingRuleIds.join(", ") : "none"}`,
       "",
       "请重新输出严格 JSON，并确保：",
       "- items 至少 3 条",
       "- 总 changes 至少 2 条",
       "- 每个 item 的 evidence/impact/risk/testPlan 非空",
+      "- 如果 REQUIRED_RULE_IDS 非空：每个 ruleId 至少在一个 item.ruleIds 中出现",
       "- 不要输出 Markdown 或代码块",
     ].join("\n");
     attempt = await runOnce(retryPrompt, 2);
     validation = validateAttempt(attempt.actionableItems);
   }
 
-  const summary = attempt.actionableItems.length > 0 ? attempt.parsed.summary ?? "analysis failed" : "analysis failed";
+  const shouldFallbackToRules =
+    attempt.parsed.error ||
+    attempt.actionableItems.length === 0 ||
+    !validation.hasAtLeastThreeItems ||
+    validation.totalChanges < 2 ||
+    validation.missingRequiredFields;
+
+  let items = attempt.actionableItems;
+  let summary = attempt.parsed.summary ?? "analysis failed";
+  let parseError = attempt.parsed.error;
+
+  if (shouldFallbackToRules && ruleEngine.seedItems.length > 0) {
+    items = ruleEngine.seedItems;
+    summary =
+      ruleEngine.findings.length > 0
+        ? `Rule-based evolution report (${ruleEngine.findings.length} rules matched)`
+        : "Rule-based evolution report";
+    if (!parseError) {
+      parseError = "invalid LLM output; returned rule-based seed items";
+    }
+  } else if (items.length === 0) {
+    summary = "analysis failed";
+  }
 
   return {
     type: "evolution_report",
@@ -531,9 +598,14 @@ export async function analyzeEvolutionReport(params: {
     dimensions: params.dimensions,
     changeTargets: params.changeTargets,
     useSearch: params.useSearch,
+    ruleEngine: {
+      matchedRuleIds: ruleEngine.requiredRuleIds,
+      builtinPath: ruleset.sources.builtinPath,
+      overridePaths: ruleset.sources.overridePaths.length > 0 ? ruleset.sources.overridePaths : undefined,
+    },
     summary,
-    items: attempt.actionableItems,
+    items,
     rawResponse: attempt.rawText ? truncateText(attempt.rawText, MAX_RAW_RESPONSE_CHARS) : undefined,
-    parseError: attempt.parsed.error,
+    parseError,
   };
 }
