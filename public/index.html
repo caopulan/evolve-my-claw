@@ -37,6 +37,14 @@
             >
               Parse
             </button>
+            <button
+              id="analyze-tasks"
+              class="sidebar-action"
+              type="button"
+              title="Analyze pending tasks with OpenClaw"
+            >
+              Analyze
+            </button>
           </div>
           <div class="sidebar-hint" id="sidebar-hint"></div>
         </div>
@@ -284,8 +292,25 @@
         </div>
       </form>
     </dialog>
+    <dialog id="analyze-dialog" class="dialog dialog-parse">
+      <form method="dialog" class="dialog-shell">
+        <div class="dialog-header">
+          <div class="dialog-kicker">Analyze</div>
+          <button class="dialog-close" type="submit" value="cancel" aria-label="Close">
+            Esc
+          </button>
+        </div>
+        <pre id="analyze-output" class="parse-output" aria-label="Analyze results"></pre>
+        <div class="dialog-footer">
+          <div class="dialog-hint">
+            Runs OpenClaw agent analysis (agentId: evolve-my-claw) via local gateway config.
+          </div>
+        </div>
+      </form>
+    </dialog>
     <div id="toast" class="toast" aria-live="polite"></div>
     <script src="/app.js"></script>
     <script src="/parse.js"></script>
+    <script src="/analyze.js"></script>
   </body>
 </html>

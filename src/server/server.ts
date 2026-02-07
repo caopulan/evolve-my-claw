@@ -3,6 +3,10 @@ import fastify from "fastify";
 import fastifyStatic from "@fastify/static";
 import { buildTimeline, getSessions, getTasks, getAnalyses } from "./api.js";
 import { parseTasks } from "./parse.js";
+import { GatewayCaptureClient } from "../gateway/client.js";
+import { analyzeTaskCandidate } from "../tasks/task-analyzer.js";
+import { appendAnalysisRecords, loadAnalysisIndex } from "../tasks/analysis-store.js";
+import { loadTaskRecords } from "../tasks/task-store.js";
 import {
   getEvolutionReports,
   parseChangeTargets,
@@ -17,6 +21,8 @@ import {
   EVOLUTION_DIMENSION_GROUPS,
   EVOLUTION_DIMENSION_LABELS,
 } from "../evolution/analysis-options.js";
+import { ensureEvolutionAgent } from "../evolution/ensure-agent.js";
+import { loadOpenClawConfig, resolveOpenClawConfigPath, type OpenClawConfigRecord } from "../evolution/openclaw-config.js";
 
 export async function startServer(params: {
   host: string;
@@ -26,6 +32,7 @@ export async function startServer(params: {
   const app = fastify({ logger: false });
   const publicDir = path.join(process.cwd(), "public");
   let parseRunning = false;
+  let analyzeRunning = false;
 
   const normalizeStringList = (value: unknown): string[] => {
     if (typeof value === "string") {
@@ -87,6 +94,130 @@ export async function startServer(params: {
       return { error: (err as Error).message };
     } finally {
       parseRunning = false;
+    }
+  });
+
+  const resolveGatewayAuth = (cfg: OpenClawConfigRecord): { token?: string; password?: string } => {
+    const gateway = (cfg.gateway ?? {}) as Record<string, unknown>;
+    const auth = (gateway.auth ?? {}) as Record<string, unknown>;
+    const token = typeof auth.token === "string" ? auth.token : undefined;
+    const password = typeof auth.password === "string" ? auth.password : undefined;
+    return { token, password };
+  };
+
+  const resolveGatewayUrl = (cfg: OpenClawConfigRecord): string => {
+    const gateway = (cfg.gateway ?? {}) as Record<string, unknown>;
+    const portRaw = gateway.port;
+    const port = typeof portRaw === "number" && Number.isFinite(portRaw) ? Math.floor(portRaw) : 18789;
+    return `ws://127.0.0.1:${port}`;
+  };
+
+  app.post("/api/tasks/analyze", async (request, reply) => {
+    if (analyzeRunning) {
+      reply.code(409);
+      return { error: "analysis already running" };
+    }
+    analyzeRunning = true;
+    const startedAt = Date.now();
+    try {
+      const body = (request.body ?? {}) as {
+        taskIds?: string[];
+        limit?: number;
+        force?: boolean;
+        timeoutSeconds?: number;
+      };
+
+      const config = loadConfig({ stateDir: params.stateDir });
+      const analysisAgentId = config.analysisAgentId || EVOLUTION_AGENT_ID;
+      const timeoutSeconds = normalizePositiveInt(body?.timeoutSeconds, config.analysisTimeoutSeconds ?? 120);
+      const force = body?.force === true;
+
+      if (analysisAgentId.toLowerCase() === EVOLUTION_AGENT_ID) {
+        ensureEvolutionAgent({ stateDir: params.stateDir });
+      }
+
+      const tasks = await loadTaskRecords(params.stateDir);
+      const existing = force ? new Set<string>() : await loadAnalysisIndex(params.stateDir);
+      const requestedIds = Array.isArray(body?.taskIds)
+        ? body.taskIds.filter((id) => typeof id === "string" && id.trim()).map((id) => id.trim())
+        : [];
+      const pending = requestedIds.length
+        ? tasks.filter((task) => requestedIds.includes(task.taskId))
+        : tasks.filter((task) => !existing.has(task.taskId));
+
+      const limit = normalizePositiveInt(body?.limit, 0);
+      const selected = limit > 0 ? pending.slice(0, limit) : pending;
+      if (selected.length === 0) {
+        return {
+          ok: true,
+          result: { selected: 0, analyzed: 0, failed: 0, appended: 0, durationMs: Date.now() - startedAt, note: "no tasks to analyze" },
+        };
+      }
+
+      const openclawConfigPath = resolveOpenClawConfigPath(params.stateDir, undefined);
+      const { config: openclawConfig } = loadOpenClawConfig(openclawConfigPath);
+      const auth = resolveGatewayAuth(openclawConfig);
+
+      let readyResolve: (() => void) | undefined;
+      let readyReject: ((err: Error) => void) | undefined;
+      const ready = new Promise<void>((resolve, reject) => {
+        readyResolve = resolve;
+        readyReject = reject;
+      });
+
+      const client = new GatewayCaptureClient({
+        url: resolveGatewayUrl(openclawConfig),
+        token: auth.token,
+        password: auth.password,
+        stateDir: params.stateDir,
+        onHello: () => readyResolve?.(),
+        onError: (err) => readyReject?.(err),
+      });
+
+      client.start();
+      await ready;
+
+      let analyzed = 0;
+      let failed = 0;
+      let appended = 0;
+      try {
+        for (const candidate of selected) {
+          try {
+            const record = await analyzeTaskCandidate({
+              candidate,
+              client,
+              analysisAgentId,
+              timeoutSeconds,
+              extraSystemPrompt:
+                "Only respond with JSON. Follow the self-evolution skill Task Candidate Analysis section. Use tools only when needed. Do not include Markdown or code fences.",
+            });
+            analyzed += 1;
+            appendAnalysisRecords([record], params.stateDir);
+            appended += 1;
+          } catch (err) {
+            failed += 1;
+            // keep going
+          }
+        }
+      } finally {
+        client.stop();
+      }
+
+      return {
+        ok: true,
+        result: {
+          selected: selected.length,
+          analyzed,
+          failed,
+          appended,
+          durationMs: Date.now() - startedAt,
+        },
+      };
+    } catch (err) {
+      reply.code(500);
+      return { error: (err as Error).message };
+    } finally {
+      analyzeRunning = false;
     }
   });
 

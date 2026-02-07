@@ -15,6 +15,7 @@ import { analyzeTaskCandidate } from "./tasks/task-analyzer.js";
 import { appendAnalysisRecords, loadAnalysisIndex } from "./tasks/analysis-store.js";
 import { ensureEvolutionAgent } from "./evolution/ensure-agent.js";
 import { EVOLUTION_AGENT_ID } from "./evolution/constants.js";
+import { loadOpenClawConfig, resolveOpenClawConfigPath, type OpenClawConfigRecord } from "./evolution/openclaw-config.js";
 
 const program = new Command();
 
@@ -272,10 +273,41 @@ program
       readyReject = reject;
     });
 
+    const resolveGatewayAuth = (cfg: OpenClawConfigRecord): { token?: string; password?: string } => {
+      const gateway = (cfg.gateway ?? {}) as Record<string, unknown>;
+      const auth = (gateway.auth ?? {}) as Record<string, unknown>;
+      const token = typeof auth.token === "string" ? auth.token : undefined;
+      const password = typeof auth.password === "string" ? auth.password : undefined;
+      return { token, password };
+    };
+
+    const resolveGatewayUrlFromConfig = (cfg: OpenClawConfigRecord): string | undefined => {
+      const gateway = (cfg.gateway ?? {}) as Record<string, unknown>;
+      const portRaw = gateway.port;
+      const port = typeof portRaw === "number" && Number.isFinite(portRaw) ? Math.floor(portRaw) : undefined;
+      if (!port) {
+        return undefined;
+      }
+      return `ws://127.0.0.1:${port}`;
+    };
+
+    const openclawConfigPath = resolveOpenClawConfigPath(
+      stateDir,
+      opts.openclawConfig ? path.resolve(String(opts.openclawConfig)) : undefined,
+    );
+    const { config: openclawConfig } = loadOpenClawConfig(openclawConfigPath);
+    const configAuth = resolveGatewayAuth(openclawConfig);
+
+    const token = opts.token ? String(opts.token) : configAuth.token;
+    const password = opts.password ? String(opts.password) : configAuth.password;
+    const defaultUrl = "ws://127.0.0.1:18789";
+    const configuredUrl = resolveGatewayUrlFromConfig(openclawConfig);
+    const url = String(opts.url || defaultUrl) === defaultUrl && configuredUrl ? configuredUrl : String(opts.url);
+
     const client = new GatewayCaptureClient({
-      url: String(opts.url),
-      token: opts.token ? String(opts.token) : undefined,
-      password: opts.password ? String(opts.password) : undefined,
+      url,
+      token,
+      password,
       stateDir,
       onHello: () => readyResolve?.(),
       onError: (err) => {
@@ -285,31 +317,41 @@ program
     });
 
     client.start();
-    await ready;
+    try {
+      await ready;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!token && msg.toLowerCase().includes("token")) {
+        console.error("gateway unauthorized: missing token. Provide --token or set gateway.auth.token in ~/.openclaw/openclaw.json");
+      }
+      throw err;
+    }
 
     let analyzed = 0;
     let failed = 0;
-    for (const candidate of selected) {
-      try {
-        const record = await analyzeTaskCandidate({
-          candidate,
-          client,
-          analysisAgentId,
-          timeoutSeconds,
-          extraSystemPrompt:
-            "Only respond with JSON. Follow the self-evolution skill Task Candidate Analysis section. Use tools only when needed. Do not include Markdown or code fences.",
-        });
-        analyzed += 1;
-        if (!opts.dryRun) {
-          appendAnalysisRecords([record], stateDir);
+    try {
+      for (const candidate of selected) {
+        try {
+          const record = await analyzeTaskCandidate({
+            candidate,
+            client,
+            analysisAgentId,
+            timeoutSeconds,
+            extraSystemPrompt:
+              "Only respond with JSON. Follow the self-evolution skill Task Candidate Analysis section. Use tools only when needed. Do not include Markdown or code fences.",
+          });
+          analyzed += 1;
+          if (!opts.dryRun) {
+            appendAnalysisRecords([record], stateDir);
+          }
+        } catch (err) {
+          failed += 1;
+          console.error(`analysis failed for ${candidate.taskId}: ${(err as Error).message}`);
         }
-      } catch (err) {
-        failed += 1;
-        console.error(`analysis failed for ${candidate.taskId}: ${(err as Error).message}`);
       }
+    } finally {
+      client.stop();
     }
-
-    client.stop();
     console.log(
       `evolve-my-claw: analyzed ${analyzed}/${selected.length} tasks (failed ${failed})`,
     );

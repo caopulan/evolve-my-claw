@@ -3794,4 +3794,10 @@ loadTasks();
 loadAnalyses();
 loadEvolutionOptions();
 loadEvolutionReports();
+
+// Expose helpers so tiny scripts (parse.js, analyze.js) can refresh state.
+window.showToast = showToast;
+window.loadSessions = loadSessions;
+window.loadTasks = loadTasks;
+window.loadAnalyses = loadAnalyses;
 renderTimeline();
