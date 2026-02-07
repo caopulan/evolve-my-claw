@@ -18,8 +18,10 @@ import { EVOLUTION_AGENT_ID } from "../evolution/constants.js";
 import { loadConfig } from "../config.js";
 import {
   EVOLUTION_CHANGE_TARGET_LABELS,
+  EVOLUTION_CHANGE_TARGETS,
   EVOLUTION_DIMENSION_GROUPS,
   EVOLUTION_DIMENSION_LABELS,
+  EVOLUTION_DIMENSIONS,
 } from "../evolution/analysis-options.js";
 import { ensureEvolutionAgent } from "../evolution/ensure-agent.js";
 import { loadOpenClawConfig, resolveOpenClawConfigPath, type OpenClawConfigRecord } from "../evolution/openclaw-config.js";
@@ -285,10 +287,20 @@ export async function startServer(params: {
     const config = loadConfig({ stateDir: params.stateDir });
     const defaults = config.evolutionAnalysis;
     const dimensions = parseDimensions(body?.dimensions);
-    const resolvedDimensions = dimensions.length > 0 ? dimensions : defaults.dimensions;
+    // Be tolerant of older configs/clients that might carry empty defaults.
+    const resolvedDimensions =
+      dimensions.length > 0
+        ? dimensions
+        : defaults.dimensions.length > 0
+          ? defaults.dimensions
+          : [...EVOLUTION_DIMENSIONS];
     const changeTargets = parseChangeTargets(body?.changeTargets);
     const resolvedChangeTargets =
-      changeTargets.length > 0 ? changeTargets : defaults.changeTargets;
+      changeTargets.length > 0
+        ? changeTargets
+        : defaults.changeTargets.length > 0
+          ? defaults.changeTargets
+          : [...EVOLUTION_CHANGE_TARGETS];
     if (resolvedDimensions.length === 0) {
       reply.code(400);
       return { error: "dimensions required" };
