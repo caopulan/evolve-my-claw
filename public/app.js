@@ -66,6 +66,12 @@ const taskStripEl = document.getElementById("task-strip");
 const detailTitleEl = document.getElementById("detail-title");
 const detailSubtitleEl = document.getElementById("detail-subtitle");
 const detailBodyEl = document.getElementById("detail-body");
+const statsSubtitleEl = document.getElementById("stats-subtitle");
+const statsNoteEl = document.getElementById("stats-note");
+const statEventsVisibleEl = document.getElementById("stat-events-visible");
+const statEventsTotalEl = document.getElementById("stat-events-total");
+const statToolsEl = document.getElementById("stat-tools");
+const statMessagesEl = document.getElementById("stat-messages");
 const evolutionContentEl = document.getElementById("evolution-content");
 const evolutionControlsEl = document.getElementById("evolution-controls");
 const evolutionSubtitleEl = document.getElementById("evolution-subtitle");
@@ -141,6 +147,87 @@ function createEmptyState(message) {
   empty.className = "empty-state";
   empty.textContent = message;
   return empty;
+}
+
+function setText(el, value) {
+  if (!el) {
+    return;
+  }
+  el.textContent = value;
+}
+
+function countKindsFromIds(ids) {
+  const counts = new Map();
+  if (!ids || !state.eventIndex) {
+    return counts;
+  }
+  ids.forEach((id) => {
+    const event = state.eventIndex.get(id);
+    const kind = event?.kind;
+    if (typeof kind !== "string" || !kind) {
+      return;
+    }
+    counts.set(kind, (counts.get(kind) || 0) + 1);
+  });
+  return counts;
+}
+
+function renderStatsPanel() {
+  if (
+    !statsSubtitleEl &&
+    !statsNoteEl &&
+    !statEventsVisibleEl &&
+    !statEventsTotalEl &&
+    !statToolsEl &&
+    !statMessagesEl
+  ) {
+    return;
+  }
+
+  if (!state.activeSessionKey) {
+    setText(statEventsVisibleEl, "-");
+    setText(statEventsTotalEl, "-");
+    setText(statToolsEl, "-");
+    setText(statMessagesEl, "-");
+    setText(statsSubtitleEl, "Select a session to populate metrics.");
+    setText(statsNoteEl, "");
+    return;
+  }
+
+  const total = state.eventIndex?.size ?? 0;
+  const visible = state.filteredEventIds?.size ?? total;
+  const kinds = countKindsFromIds(state.filteredEventIds);
+  const tools =
+    (kinds.get("tool") || 0) +
+    (kinds.get("subagent_run") || 0) +
+    (kinds.get("subagent_result") || 0);
+  const messages = (kinds.get("user_message") || 0) + (kinds.get("assistant_message") || 0);
+
+  setText(statEventsVisibleEl, String(visible));
+  setText(statEventsTotalEl, String(total));
+  setText(statToolsEl, String(tools));
+  setText(statMessagesEl, String(messages));
+
+  const tasks = state.tasksBySession.get(state.activeSessionKey) || [];
+  const subtitleParts = [];
+  if (state.tasksLoaded) {
+    subtitleParts.push(`${tasks.length} task${tasks.length === 1 ? "" : "s"}`);
+  }
+  subtitleParts.push(`${total} event${total === 1 ? "" : "s"}`);
+  setText(statsSubtitleEl, subtitleParts.join(" · "));
+
+  const focusedTask =
+    state.focusedTaskId && state.tasksById.get(state.focusedTaskId);
+  if (focusedTask && focusedTask.sessionKey === state.activeSessionKey) {
+    setText(statsNoteEl, `Focus: ${taskDisplayTitle(focusedTask)}`);
+  } else if (state.selectedTaskIds.size) {
+    setText(
+      statsNoteEl,
+      `Selection: ${state.selectedTaskIds.size} task${state.selectedTaskIds.size === 1 ? "" : "s"}`,
+    );
+  } else {
+    setText(statsNoteEl, "");
+  }
 }
 
 function isTypingTarget(target) {
@@ -3064,6 +3151,7 @@ function renderTimeline() {
     }
     timelineEl.appendChild(createEmptyState("Select a session to load its timeline"));
     renderDetailPanel();
+    renderStatsPanel();
     return;
   }
 
@@ -3100,6 +3188,8 @@ function renderTimeline() {
     const searchFlag = search ? " · search:on" : "";
     timelineCountEl.textContent = `${visible}/${total} events${focusFlag}${searchFlag}`;
   }
+
+  renderStatsPanel();
 
   if (!filteredResult.events.length) {
     timelineEl.appendChild(
