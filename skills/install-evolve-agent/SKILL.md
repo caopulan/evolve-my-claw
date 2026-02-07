@@ -105,6 +105,10 @@ cp "$CONFIG_PATH" "$CONFIG_PATH.bak.evolve.$(date +%Y%m%d-%H%M%S)"
 
 - 如果你的环境没有 `anthropic/claude-opus-4-5`，不要硬写这个模型；要么删掉 `model` 字段让它走默认值，要么换成你已可用的高质量模型。
 - 只要确保 tools allow/deny 和 workspace 正确即可；model 是可选的。
+- 新增说明（模型自动选择规则）：当你要为该 Agent 设置 `model` 时，**必须自动完成**以下选择流程并在结束时汇报结果：
+  - `thinking`：优先使用 schema 支持的**最高等级**（通常是 `"high"`；如当前 schema 允许更高等级，取更高；若不支持 `thinking` 字段则移除）。
+  - `primary`：按 **GPT → Claude → Gemini** 的顺序，从当前配置 `models` 中可用的**最高质量/最新**模型里选一个；如果三类都不可用，删除 `model` 字段让其走默认。
+  - 选择依据必须来自当前配置/Schema 或可用模型清单，避免硬编码未知模型名。
 
 ### Step 2：创建 evolve workspace 目录结构
 
@@ -246,4 +250,5 @@ openclaw agent --agent evolve --message "执行进化分析"
 - 你修改/新增了哪些文件（路径 + 简述）
 - 配置文件是否已备份，备份文件名（含真实路径）
 - evolve agent 的 id 与 workspace 路径
+- 你为 evolve agent 选择的 `model.primary` 与 `thinking`（若因不支持而省略也要说明）
 - 下一步验证命令（如上）
