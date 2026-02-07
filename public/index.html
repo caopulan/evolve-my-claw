@@ -7,76 +7,37 @@
     <title>Evolve My Claw</title>
     <link
       rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;700&family=Spline+Sans:wght@400;500;600&family=Azeret+Mono:wght@400;600&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Azeret+Mono:wght@400;600&display=swap"
     />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="app">
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <div class="brand">
-            <div class="brand-mark">EMC</div>
-            <div class="brand-text">
-              <h1>Evolve My Claw</h1>
-              <p>OpenClaw signal archive</p>
+    <div class="page">
+      <div class="app">
+        <aside class="sidebar" aria-label="Navigation">
+          <div class="side-top">
+            <div class="brand">
+              <div class="brand-mark" aria-hidden="true">EMC</div>
+              <div class="brand-text">
+                <div class="brand-name">Evolve My Claw</div>
+                <div class="brand-sub">Timeline toolkit for OpenClaw</div>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="sidebar-tools">
-          <div class="sidebar-search-row">
-            <label class="sidebar-search">
-              <span class="sr-only">Search sessions</span>
-              <input id="session-search" type="search" placeholder="Search sessions or tasks" />
-            </label>
-            <button
-              id="parse-tasks"
-              class="sidebar-action"
-              type="button"
-              title="Parse task candidates"
-            >
-              Parse
-            </button>
-            <button
-              id="analyze-tasks"
-              class="sidebar-action"
-              type="button"
-              title="Analyze pending tasks with OpenClaw"
-            >
-              Analyze
-            </button>
-          </div>
-          <div class="sidebar-hint" id="sidebar-hint"></div>
-        </div>
-        <div class="sidebar-section">
-          <div id="sessions" class="session-list"></div>
-        </div>
-        <div class="sidebar-footer">
-          <p>Local timeline viewer. No OpenClaw repo changes required.</p>
-        </div>
-      </aside>
-      <main class="main">
-        <div class="toolbar">
-          <div class="toolbar-left">
-            <button id="sidebar-toggle" class="toolbar-icon-button" type="button" aria-label="Toggle sessions">
-              <span aria-hidden="true">☰</span>
-            </button>
-            <label class="top-search">
-              <span class="sr-only">Search timeline</span>
-              <input id="search" type="search" placeholder="Search this session timeline..." />
-            </label>
-          </div>
-          <div class="toolbar-right">
+
+          <nav class="side-nav" aria-label="Overview">
+            <div class="side-title">Overview</div>
             <div class="view-switch" data-active="task" role="tablist" aria-label="Panel">
               <button
                 class="view-option active"
                 type="button"
                 data-view="task"
-                data-label="Timeline"
+                data-label="Dashboard"
                 role="tab"
-                aria-label="Timeline"
+                aria-label="Dashboard"
               >
-                <span class="view-option-label">Timeline</span>
+                <span class="view-icon" aria-hidden="true">▦</span>
+                <span class="view-option-label">Dashboard</span>
               </button>
               <button
                 class="view-option"
@@ -86,161 +47,243 @@
                 role="tab"
                 aria-label="Evolution"
               >
+                <span class="view-icon" aria-hidden="true">✦</span>
                 <span class="view-option-label">Evolution</span>
               </button>
-              <span class="view-indicator" aria-hidden="true">
-                <span class="view-indicator-label">Timeline</span>
-              </span>
+              <span class="view-indicator-label" aria-hidden="true"></span>
             </div>
-            <button id="cmdk-open" class="toolbar-button" type="button">
-              <span class="toolbar-button-icon" aria-hidden="true">Ctrl K</span>
-              <span class="toolbar-button-label">Command</span>
-            </button>
-            <button id="help-open" class="toolbar-button" type="button">
-              <span class="toolbar-button-icon" aria-hidden="true">?</span>
-              <span class="toolbar-button-label">Shortcuts</span>
-            </button>
-          </div>
-        </div>
-        <section class="hero" aria-label="Active session">
-          <div class="hero-card">
-            <div class="hero-kicker">OPENCLAW SESSION</div>
-            <h2 id="session-title">Select a session</h2>
-            <p id="session-subtitle" class="muted"></p>
-          </div>
-        </section>
-        <section id="task-view" class="view active">
-          <div class="content-grid">
-            <div class="timeline-column">
-              <div class="timeline-toolbar">
-                <div class="timeline-meta">
-                  <div id="timeline-count" class="timeline-count" aria-live="polite"></div>
-                  <button id="clear-focus" class="pill-button" type="button" hidden>
-                    Clear focus
-                  </button>
+          </nav>
+
+          <section class="side-controls" aria-label="Session controls">
+            <div class="side-title">Sessions</div>
+            <label class="side-search">
+              <span class="sr-only">Search sessions</span>
+              <input id="session-search" type="search" placeholder="Search sessions or tasks" />
+            </label>
+            <div class="side-actions">
+              <button id="parse-tasks" class="side-action" type="button" title="Parse task candidates">
+                Parse
+              </button>
+              <button
+                id="analyze-tasks"
+                class="side-action side-action-primary"
+                type="button"
+                title="Analyze pending tasks with OpenClaw"
+              >
+                Analyze
+              </button>
+            </div>
+            <div class="side-hint" id="sidebar-hint"></div>
+          </section>
+
+          <section class="side-sessions" aria-label="Sessions list">
+            <div id="sessions" class="session-list"></div>
+          </section>
+
+          <footer class="side-foot">
+            <div class="side-foot-note">Local viewer. No OpenClaw repo changes required.</div>
+          </footer>
+        </aside>
+
+        <div class="workspace">
+          <header class="topbar" aria-label="Toolbar">
+            <label class="top-search">
+              <span class="sr-only">Search timeline</span>
+              <input id="search" type="search" placeholder="Search this session timeline..." />
+            </label>
+            <div class="top-actions">
+              <button id="cmdk-open" class="icon-btn" type="button" title="Command palette">
+                <span class="icon" aria-hidden="true">⌘K</span>
+                <span class="toolbar-button-label sr-only">Command</span>
+              </button>
+              <button id="help-open" class="icon-btn" type="button" title="Shortcuts">
+                <span class="icon" aria-hidden="true">?</span>
+                <span class="toolbar-button-label sr-only">Shortcuts</span>
+              </button>
+              <button id="sidebar-toggle" class="icon-btn icon-btn-ghost" type="button" title="Toggle sessions">
+                <span class="icon" aria-hidden="true">☰</span>
+                <span class="toolbar-button-label sr-only">Hide sessions</span>
+              </button>
+              <div class="profile" aria-label="Profile">
+                <div class="profile-avatar" aria-hidden="true"></div>
+                <div class="profile-meta">
+                  <div class="profile-name">Local</div>
+                  <div class="profile-sub">OpenClaw</div>
                 </div>
-                <details class="filters">
-                  <summary class="filters-summary">
-                    <span class="filters-label">Filters</span>
-                  </summary>
-                  <div class="filters-panel">
-                    <div class="filters-actions">
-                      <button class="filters-action" type="button" data-filter-action="all">
-                        All
-                      </button>
-                      <button class="filters-action" type="button" data-filter-action="none">
-                        None
-                      </button>
-                      <button class="filters-action" type="button" data-filter-action="messages">
-                        Messages
-                      </button>
-                      <button class="filters-action" type="button" data-filter-action="tools">
-                        Tools
-                      </button>
-                    </div>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="user_message" checked />
-                      <span>User</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="assistant_message" checked />
-                      <span>Assistant</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="tool" checked />
-                      <span>Tools</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="subagent_run" checked />
-                      <span>Subagents</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="subagent_result" checked />
-                      <span>Subagent result</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="compaction" checked />
-                      <span>Compaction</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="branch_summary" checked />
-                      <span>Branch</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="agent_event" checked />
-                      <span>Agent events</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="model_change" checked />
-                      <span>Model</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="thinking_level_change" checked />
-                      <span>Thinking</span>
-                    </label>
-                    <label class="filter-pill">
-                      <input type="checkbox" data-kind="session_info" checked />
-                      <span>Session info</span>
-                    </label>
-                  </div>
-                </details>
               </div>
-              <div id="task-strip" class="task-strip" hidden></div>
-              <section class="timeline-wrap">
-                <div id="timeline" class="timeline"></div>
-              </section>
             </div>
-            <aside class="right-rail" aria-label="Insights">
-              <section class="stats-panel" aria-label="Session statistics">
-                <div class="detail-header stats-header">
-                  <span class="detail-label">Statistic</span>
-                  <h3>Session snapshot</h3>
-                  <p class="muted" id="stats-subtitle">Select a session to populate metrics.</p>
+          </header>
+
+          <main class="main" data-view="task">
+            <section class="hero" aria-label="Active session">
+              <div class="hero-card">
+                <div class="hero-kicker">Online course</div>
+                <h2 id="session-title">Select a session</h2>
+                <p id="session-subtitle"></p>
+                <div class="hero-cta">
+                  <button class="hero-btn" id="hero-browse" type="button">
+                    Browse sessions
+                  </button>
+                  <div class="hero-meta" id="timeline-count" aria-live="polite"></div>
                 </div>
-                <div class="stats-grid">
-                  <div class="stat-tile">
-                    <div class="stat-value" id="stat-events-visible">-</div>
-                    <div class="stat-label">Visible</div>
+              </div>
+            </section>
+
+            <section id="task-view" class="view active" aria-label="Dashboard">
+              <div class="deck">
+                <section class="deck-main" aria-label="Timeline">
+                  <div id="task-strip" class="task-strip" hidden></div>
+
+                  <div class="timeline-frame">
+                    <div class="timeline-head">
+                      <button id="clear-focus" class="chip-btn" type="button" hidden>
+                        Clear focus
+                      </button>
+                      <details class="filters">
+                        <summary class="filters-summary">
+                          <span class="filters-label">Filters</span>
+                        </summary>
+                        <div class="filters-panel">
+                          <div class="filters-actions">
+                            <button class="filters-action" type="button" data-filter-action="all">
+                              All
+                            </button>
+                            <button class="filters-action" type="button" data-filter-action="none">
+                              None
+                            </button>
+                            <button class="filters-action" type="button" data-filter-action="messages">
+                              Messages
+                            </button>
+                            <button class="filters-action" type="button" data-filter-action="tools">
+                              Tools
+                            </button>
+                          </div>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="user_message" checked />
+                            <span>User</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="assistant_message" checked />
+                            <span>Assistant</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="tool" checked />
+                            <span>Tools</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="subagent_run" checked />
+                            <span>Subagents</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="subagent_result" checked />
+                            <span>Subagent result</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="compaction" checked />
+                            <span>Compaction</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="branch_summary" checked />
+                            <span>Branch</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="agent_event" checked />
+                            <span>Agent events</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="model_change" checked />
+                            <span>Model</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="thinking_level_change" checked />
+                            <span>Thinking</span>
+                          </label>
+                          <label class="filter-pill">
+                            <input type="checkbox" data-kind="session_info" checked />
+                            <span>Session info</span>
+                          </label>
+                        </div>
+                      </details>
+                    </div>
+                    <section class="timeline-wrap" aria-label="Timeline events">
+                      <div id="timeline" class="timeline"></div>
+                    </section>
                   </div>
-                  <div class="stat-tile">
-                    <div class="stat-value" id="stat-events-total">-</div>
-                    <div class="stat-label">Total</div>
+                </section>
+
+                <aside class="deck-aside" aria-label="Insights">
+                  <section class="card card-stat" aria-label="Session statistics">
+                    <div class="card-head">
+                      <div class="card-kicker">Statistic</div>
+                      <div class="card-title">Session snapshot</div>
+                      <div class="card-sub" id="stats-subtitle">Select a session to populate metrics.</div>
+                    </div>
+
+                    <div class="stat-hero">
+                      <div id="stats-ring" class="stat-ring" aria-hidden="true">
+                        <div class="stat-avatar" aria-hidden="true">EMC</div>
+                        <div id="stats-ring-label" class="stat-ring-label">0%</div>
+                      </div>
+                      <div class="stat-copy">
+                        <div id="stats-greeting-title" class="stat-copy-title">Good day</div>
+                        <div id="stats-greeting-sub" class="stat-copy-sub">
+                          Pick a session to explore its timeline.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="stat-grid">
+                      <div class="stat-tile">
+                        <div class="stat-value" id="stat-events-visible">-</div>
+                        <div class="stat-label">Visible</div>
+                      </div>
+                      <div class="stat-tile">
+                        <div class="stat-value" id="stat-events-total">-</div>
+                        <div class="stat-label">Total</div>
+                      </div>
+                      <div class="stat-tile">
+                        <div class="stat-value" id="stat-tools">-</div>
+                        <div class="stat-label">Tools</div>
+                      </div>
+                      <div class="stat-tile">
+                        <div class="stat-value" id="stat-messages">-</div>
+                        <div class="stat-label">Messages</div>
+                      </div>
+                    </div>
+
+                    <div class="card-note" id="stats-note"></div>
+                  </section>
+
+                  <section class="card card-detail" id="detail-panel" aria-label="Selection detail">
+                    <div class="card-head">
+                      <div class="card-kicker">Selection</div>
+                      <div class="card-title" id="detail-title">Task Detail</div>
+                      <div class="card-sub" id="detail-subtitle"></div>
+                    </div>
+                    <div class="detail-body" id="detail-body"></div>
+                  </section>
+                </aside>
+              </div>
+            </section>
+
+            <section id="evolution-view" class="view" aria-label="Evolution">
+              <div class="evo-wrap">
+                <div class="card evo-card">
+                  <div class="card-head">
+                    <div class="card-kicker">Evolution</div>
+                    <div class="card-title" id="evolution-title">Evolution Analysis</div>
+                    <div class="card-sub" id="evolution-subtitle"></div>
                   </div>
-                  <div class="stat-tile">
-                    <div class="stat-value" id="stat-tools">-</div>
-                    <div class="stat-label">Tools</div>
-                  </div>
-                  <div class="stat-tile">
-                    <div class="stat-value" id="stat-messages">-</div>
-                    <div class="stat-label">Messages</div>
-                  </div>
+                  <div id="evolution-controls" class="evolution-controls"></div>
+                  <div id="evolution-content"></div>
                 </div>
-                <div class="stats-note" id="stats-note"></div>
-              </section>
-              <section class="detail-panel" id="detail-panel" aria-label="Selection detail">
-                <div class="detail-header">
-                  <span class="detail-label">Selection</span>
-                  <h3 id="detail-title">Task Detail</h3>
-                  <p id="detail-subtitle" class="muted"></p>
-                </div>
-                <div class="detail-body" id="detail-body"></div>
-              </section>
-            </aside>
-          </div>
-        </section>
-        <section id="evolution-view" class="view">
-          <div class="evolution-panel">
-            <div class="detail-header evolution-header">
-              <span class="detail-label">Evolution</span>
-              <h3 id="evolution-title">Evolution Analysis</h3>
-              <p id="evolution-subtitle" class="muted"></p>
-            </div>
-            <div id="evolution-controls" class="evolution-controls"></div>
-            <div id="evolution-content"></div>
-          </div>
-        </section>
-      </main>
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>
     </div>
+
     <dialog id="cmdk" class="dialog dialog-cmdk">
       <form method="dialog" class="dialog-shell">
         <div class="dialog-header">
@@ -258,12 +301,7 @@
             autocomplete="off"
           />
         </label>
-        <div
-          id="cmdk-results"
-          class="cmdk-results"
-          role="listbox"
-          aria-label="Command results"
-        ></div>
+        <div id="cmdk-results" class="cmdk-results" role="listbox" aria-label="Command results"></div>
         <div class="dialog-footer">
           <div class="dialog-hint">
             <span class="kbd">Up</span><span class="kbd">Down</span> navigate
@@ -273,6 +311,7 @@
         </div>
       </form>
     </dialog>
+
     <dialog id="help" class="dialog dialog-help">
       <form method="dialog" class="dialog-shell">
         <div class="dialog-header">
@@ -308,6 +347,7 @@
         </div>
       </form>
     </dialog>
+
     <dialog id="parse-dialog" class="dialog dialog-parse">
       <form method="dialog" class="dialog-shell">
         <div class="dialog-header">
@@ -322,6 +362,7 @@
         </div>
       </form>
     </dialog>
+
     <dialog id="analyze-dialog" class="dialog dialog-parse">
       <form method="dialog" class="dialog-shell">
         <div class="dialog-header">
@@ -338,6 +379,7 @@
         </div>
       </form>
     </dialog>
+
     <div id="toast" class="toast" aria-live="polite"></div>
     <script src="/app.js"></script>
     <script src="/parse.js"></script>

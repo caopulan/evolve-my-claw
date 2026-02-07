@@ -72,6 +72,10 @@ const statEventsVisibleEl = document.getElementById("stat-events-visible");
 const statEventsTotalEl = document.getElementById("stat-events-total");
 const statToolsEl = document.getElementById("stat-tools");
 const statMessagesEl = document.getElementById("stat-messages");
+const statsRingEl = document.getElementById("stats-ring");
+const statsRingLabelEl = document.getElementById("stats-ring-label");
+const statsGreetingTitleEl = document.getElementById("stats-greeting-title");
+const statsGreetingSubEl = document.getElementById("stats-greeting-sub");
 const evolutionContentEl = document.getElementById("evolution-content");
 const evolutionControlsEl = document.getElementById("evolution-controls");
 const evolutionSubtitleEl = document.getElementById("evolution-subtitle");
@@ -89,6 +93,7 @@ const cmdkInputEl = document.getElementById("cmdk-input");
 const cmdkResultsEl = document.getElementById("cmdk-results");
 const helpDialogEl = document.getElementById("help");
 const toastEl = document.getElementById("toast");
+const heroBrowseEl = document.getElementById("hero-browse");
 
 const SELECTED_TASKS_KEY = "emc_selected_tasks";
 const FILTERS_KEY = "emc_timeline_filters";
@@ -179,7 +184,11 @@ function renderStatsPanel() {
     !statEventsVisibleEl &&
     !statEventsTotalEl &&
     !statToolsEl &&
-    !statMessagesEl
+    !statMessagesEl &&
+    !statsRingEl &&
+    !statsRingLabelEl &&
+    !statsGreetingTitleEl &&
+    !statsGreetingSubEl
   ) {
     return;
   }
@@ -191,6 +200,12 @@ function renderStatsPanel() {
     setText(statMessagesEl, "-");
     setText(statsSubtitleEl, "Select a session to populate metrics.");
     setText(statsNoteEl, "");
+    if (statsRingEl) {
+      statsRingEl.style.setProperty("--p", "0");
+    }
+    setText(statsRingLabelEl, "0%");
+    setText(statsGreetingTitleEl, "Good day");
+    setText(statsGreetingSubEl, "Pick a session to explore its timeline.");
     return;
   }
 
@@ -207,6 +222,11 @@ function renderStatsPanel() {
   setText(statEventsTotalEl, String(total));
   setText(statToolsEl, String(tools));
   setText(statMessagesEl, String(messages));
+  const percent = total > 0 ? Math.round((visible / total) * 100) : 0;
+  if (statsRingEl) {
+    statsRingEl.style.setProperty("--p", String(Math.max(0, Math.min(100, percent))));
+  }
+  setText(statsRingLabelEl, `${percent}%`);
 
   const tasks = state.tasksBySession.get(state.activeSessionKey) || [];
   const subtitleParts = [];
@@ -215,6 +235,12 @@ function renderStatsPanel() {
   }
   subtitleParts.push(`${total} event${total === 1 ? "" : "s"}`);
   setText(statsSubtitleEl, subtitleParts.join(" · "));
+
+  setText(statsGreetingTitleEl, "Session insights");
+  setText(
+    statsGreetingSubEl,
+    visible === total ? "All events are visible. Adjust filters to narrow focus." : "Some events are hidden by filters.",
+  );
 
   const focusedTask =
     state.focusedTaskId && state.tasksById.get(state.focusedTaskId);
@@ -3752,6 +3778,16 @@ if (cmdkOpenEl) {
 
 if (helpOpenEl) {
   helpOpenEl.addEventListener("click", () => openHelp());
+}
+
+if (heroBrowseEl) {
+  heroBrowseEl.addEventListener("click", () => {
+    setSidebarHidden(false);
+    if (sessionSearchEl) {
+      sessionSearchEl.focus();
+      sessionSearchEl.select();
+    }
+  });
 }
 
 if (clearFocusEl) {
