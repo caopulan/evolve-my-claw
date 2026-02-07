@@ -76,6 +76,10 @@ const statsRingEl = document.getElementById("stats-ring");
 const statsRingLabelEl = document.getElementById("stats-ring-label");
 const statsGreetingTitleEl = document.getElementById("stats-greeting-title");
 const statsGreetingSubEl = document.getElementById("stats-greeting-sub");
+const statBarUserEl = document.getElementById("stat-bar-user");
+const statBarAssistantEl = document.getElementById("stat-bar-assistant");
+const statBarToolsEl = document.getElementById("stat-bar-tools");
+const statBarSubagentsEl = document.getElementById("stat-bar-subagents");
 const evolutionContentEl = document.getElementById("evolution-content");
 const evolutionControlsEl = document.getElementById("evolution-controls");
 const evolutionSubtitleEl = document.getElementById("evolution-subtitle");
@@ -188,7 +192,11 @@ function renderStatsPanel() {
     !statsRingEl &&
     !statsRingLabelEl &&
     !statsGreetingTitleEl &&
-    !statsGreetingSubEl
+    !statsGreetingSubEl &&
+    !statBarUserEl &&
+    !statBarAssistantEl &&
+    !statBarToolsEl &&
+    !statBarSubagentsEl
   ) {
     return;
   }
@@ -206,6 +214,18 @@ function renderStatsPanel() {
     setText(statsRingLabelEl, "0%");
     setText(statsGreetingTitleEl, "Good day");
     setText(statsGreetingSubEl, "Pick a session to explore its timeline.");
+    if (statBarUserEl) {
+      statBarUserEl.style.setProperty("--v", "0");
+    }
+    if (statBarAssistantEl) {
+      statBarAssistantEl.style.setProperty("--v", "0");
+    }
+    if (statBarToolsEl) {
+      statBarToolsEl.style.setProperty("--v", "0");
+    }
+    if (statBarSubagentsEl) {
+      statBarSubagentsEl.style.setProperty("--v", "0");
+    }
     return;
   }
 
@@ -227,6 +247,25 @@ function renderStatsPanel() {
     statsRingEl.style.setProperty("--p", String(Math.max(0, Math.min(100, percent))));
   }
   setText(statsRingLabelEl, `${percent}%`);
+
+  const userCount = kinds.get("user_message") || 0;
+  const assistantCount = kinds.get("assistant_message") || 0;
+  const toolsCount = kinds.get("tool") || 0;
+  const subagentsCount = (kinds.get("subagent_run") || 0) + (kinds.get("subagent_result") || 0);
+  const maxCount = Math.max(1, userCount, assistantCount, toolsCount, subagentsCount);
+  const toBar = (n) => String(Math.round((n / maxCount) * 100));
+  if (statBarUserEl) {
+    statBarUserEl.style.setProperty("--v", toBar(userCount));
+  }
+  if (statBarAssistantEl) {
+    statBarAssistantEl.style.setProperty("--v", toBar(assistantCount));
+  }
+  if (statBarToolsEl) {
+    statBarToolsEl.style.setProperty("--v", toBar(toolsCount));
+  }
+  if (statBarSubagentsEl) {
+    statBarSubagentsEl.style.setProperty("--v", toBar(subagentsCount));
+  }
 
   const tasks = state.tasksBySession.get(state.activeSessionKey) || [];
   const subtitleParts = [];
