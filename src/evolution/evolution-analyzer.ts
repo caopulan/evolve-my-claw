@@ -3,6 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import type { GatewayCaptureClient } from "../gateway/client.js";
 import type { TaskRecord } from "../tasks/task-store.js";
+import {
+  EVOLUTION_DIMENSION_GROUPS,
+  EVOLUTION_DIMENSION_LABELS,
+  EVOLUTION_DIMENSIONS,
+} from "./analysis-options.js";
 import type {
   EvolutionChangeTarget,
   EvolutionDimension,
@@ -28,7 +33,7 @@ const MAX_CONTINUATIONS = 3;
 const MAX_FILE_SNIPPET_CHARS = 3500;
 const MAX_SKILLS_PER_WORKSPACE = 5;
 const MAX_SKILL_SNIPPET_CHARS = 2500;
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 function truncateText(value: string, max = MAX_FIELD_CHARS): string {
   if (value.length <= max) {
@@ -243,10 +248,23 @@ function buildWorkspaceContext(workspaces: Array<{ agentId: string; path: string
   return lines.join("\n");
 }
 
+function formatDimensionDefinitions(): string {
+  const lines: string[] = [];
+  for (const group of EVOLUTION_DIMENSION_GROUPS) {
+    lines.push(`${group.label}:`);
+    for (const id of group.items) {
+      lines.push(`- ${id}: ${EVOLUTION_DIMENSION_LABELS[id]}`);
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
+
 function buildPrompt(params: {
   tasks: TaskRecord[];
   dimensions: EvolutionDimension[];
   changeTargets: EvolutionChangeTarget[];
+  analysisScope: { scopeDays: number; agentIds: string[]; focus: string[] };
   allowedPaths: string[];
   openclawConfigPath: string;
   openclawConfigSnippet: string;
@@ -268,8 +286,8 @@ function buildPrompt(params: {
       ? params.workspacePaths.map((entry) => `- ${entry.agentId}: ${entry.path}`).join("\n")
       : "none";
   return [
-    "你是 OpenClaw evolution 分析器。",
-    "请根据选中的任务与维度输出严格 JSON（不要 Markdown，不要代码块）。",
+    "你是 OpenClaw evolve-my-claw 分析 Agent，必须遵循 skill: self-evolution。",
+    "请根据选中的任务与分析配置输出严格 JSON（不要 Markdown，不要代码块）。",
     "目标：提出可执行、可落盘、可回滚的自我进化方案（优先 changes，其次 recommendation，最后才是 userActions）。",
     "输出必须符合以下 JSON schema：",
     "{",
@@ -279,7 +297,7 @@ function buildPrompt(params: {
     '      "itemId": string,',
     '      "scope": "task|multi",',
     '      "taskId"?: string,',
-    '      "dimension": "per_task_tool_quality|cross_task_patterns|change_recommendation",',
+    `      "dimension": "${EVOLUTION_DIMENSIONS.join("|")}",`,
     '      "severity": "low|medium|high",',
     '      "title": string,',
     '      "ruleIds"?: string[],',
@@ -310,6 +328,7 @@ function buildPrompt(params: {
     "  ]",
     "}",
     "要求：",
+    "- 必须遵循 self-evolution skill 的流程与维度。",
     "- 只分析指定任务，不要引入其他任务。",
     "- 仅输出与选择的维度相关的分析。",
     "- 不允许 no-op：items 至少输出 3 条，并且每个选中维度至少输出 1 条。",
@@ -327,6 +346,14 @@ function buildPrompt(params: {
     "- 所有 agent_file 修改必须针对执行任务的 Agent（EXECUTION_WORKSPACES）；不要修改评估 Agent 自己的 workspace（analysisAgentId）。",
     "- file_replace 只能用在 WORKSPACE_EXCERPTS 里出现过的原文片段；否则优先 file_append 或 file_write（overwrite=false）。",
     "- 如果 USE_SEARCH=true，必须至少使用一次 sessions_spawn 调用子代理检索 web 或 X/Twitter 方案；找到可行方案再写入 recommendation，并注明来源；找不到就不必提及。",
+    "",
+    "DIMENSION_DEFINITIONS:",
+    formatDimensionDefinitions(),
+    "",
+    "ANALYSIS_SCOPE:",
+    `- scopeDays: ${params.analysisScope.scopeDays}`,
+    `- agentIds: ${params.analysisScope.agentIds.join(", ") || "all"}`,
+    `- focus: ${params.analysisScope.focus.join(", ") || "none"}`,
     "",
     `SELECTED_DIMENSIONS: ${params.dimensions.join(", ") || "none"}`,
     `CHANGE_TARGETS: ${params.changeTargets.join(", ") || "none"}`,
@@ -416,6 +443,7 @@ export async function analyzeEvolutionReport(params: {
   timeoutSeconds: number;
   dimensions: EvolutionDimension[];
   changeTargets: EvolutionChangeTarget[];
+  analysisScope: { scopeDays: number; agentIds: string[]; focus: string[] };
   useSearch: boolean;
   allowedPaths: string[];
   openclawConfigPath: string;
@@ -442,6 +470,7 @@ export async function analyzeEvolutionReport(params: {
     tasks: params.tasks,
     dimensions: params.dimensions,
     changeTargets: params.changeTargets,
+    analysisScope: params.analysisScope,
     allowedPaths: params.allowedPaths,
     openclawConfigPath: params.openclawConfigPath,
     openclawConfigSnippet,
@@ -470,8 +499,8 @@ export async function analyzeEvolutionReport(params: {
         deliver: false,
         timeout: params.timeoutSeconds,
         extraSystemPrompt: params.useSearch
-          ? "Only respond with JSON. Use tools when USE_SEARCH=true and call sessions_spawn at least once. Do not include Markdown or code fences."
-          : "Only respond with JSON. Do not use tools. Do not include Markdown or code fences.",
+          ? "Only respond with JSON. Use tools when needed. If USE_SEARCH=true, call sessions_spawn at least once. Do not include Markdown or code fences."
+          : "Only respond with JSON. Use tools only when needed. Do not include Markdown or code fences.",
         idempotencyKey,
         label: attempt === 1 ? "Evolve Report" : `Evolve Report (retry ${attempt})`,
       },
@@ -598,6 +627,7 @@ export async function analyzeEvolutionReport(params: {
     taskIds: params.tasks.map((task) => task.taskId),
     dimensions: params.dimensions,
     changeTargets: params.changeTargets,
+    analysisScope: params.analysisScope,
     useSearch: params.useSearch,
     ruleEngine: {
       matchedRuleIds: ruleEngine.requiredRuleIds,

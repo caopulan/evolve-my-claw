@@ -34,8 +34,8 @@ const state = {
   sidebarHidden: false,
   evolutionReports: [],
   evolutionRunning: false,
-  evolutionDimensions: new Set(["per_task_tool_quality", "cross_task_patterns"]),
-  evolutionChangeTargets: new Set(["openclaw_config", "agent_persona", "hooks", "plugins", "skills"]),
+  evolutionDimensions: new Set(),
+  evolutionChangeTargets: new Set(),
   evolutionUseSearch: false,
   evolutionNotice: "",
   evolutionHistoryScope: "all",
@@ -47,6 +47,9 @@ const state = {
   evolutionTaskQuery: "",
   applyingChanges: new Set(),
   appliedChanges: new Set(),
+  evolutionScopeDays: 5,
+  evolutionAgentIds: [],
+  evolutionFocus: "",
 };
 
 const appEl = document.querySelector(".app");
@@ -90,6 +93,9 @@ const EVOLUTION_APPLIED_CHANGES_KEY = "emc_evolution_applied_changes";
 const EVOLUTION_USE_SEARCH_KEY = "emc_evolution_use_search";
 const EVOLUTION_HISTORY_SCOPE_KEY = "emc_evolution_history_scope";
 const EVOLUTION_ACTIVE_REPORT_KEY = "emc_evolution_active_report";
+const EVOLUTION_SCOPE_DAYS_KEY = "emc_evolution_scope_days";
+const EVOLUTION_AGENT_IDS_KEY = "emc_evolution_agent_ids";
+const EVOLUTION_FOCUS_KEY = "emc_evolution_focus";
 
 const DEFAULT_FILTERS = [
   "user_message",
@@ -334,25 +340,75 @@ function truncateText(text, max = 80) {
   return `${trimmed.slice(0, max)}…`;
 }
 
-const DIMENSION_LABELS = {
-  per_task_tool_quality: "Per-task tool review",
-  cross_task_patterns: "Cross-task patterns",
+const FALLBACK_DIMENSION_LABELS = {
+  C1: "模型选择与推理策略",
+  C2: "工具策略与越权防护",
+  C3: "Exec 环境",
+  C4: "Web 工具能力",
+  C5: "多 Agent 结构与路由",
+  C6: "子代理策略",
+  C7: "Channel 安全与 Allowlist",
+  C8: "消息并发与去抖",
+  C9: "Compaction 与上下文管理",
+  C10: "Cron 调度",
+  C11: "Plugins",
+  W1: "行为准则与流程 (AGENTS.md)",
+  W2: "环境与工具坑位 (TOOLS.md)",
+  W3: "人格/语气/偏好 (SOUL/IDENTITY/USER)",
+  W4: "持久记忆 (MEMORY.md + memory/*)",
+  W5: "启动清单 (BOOT.md)",
+  E1: "技能新增",
+  E2: "技能优化",
+  E3: "Internal Hooks",
+  E4: "版本升级",
 };
 
-const CHANGE_TARGET_LABELS = {
-  openclaw_config: "openclaw.json",
-  agent_persona: "Agent persona",
-  hooks: "Hooks",
-  plugins: "Plugins",
-  skills: "Skills",
+const FALLBACK_DIMENSION_GROUPS = [
+  {
+    id: "config",
+    label: "配置层 (openclaw.json)",
+    items: [
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6",
+      "C7",
+      "C8",
+      "C9",
+      "C10",
+      "C11",
+    ],
+  },
+  {
+    id: "workspace",
+    label: "Workspace 层",
+    items: ["W1", "W2", "W3", "W4", "W5"],
+  },
+  {
+    id: "extensions",
+    label: "扩展层 (Skills / Hooks)",
+    items: ["E1", "E2", "E3", "E4"],
+  },
+];
+
+const FALLBACK_CHANGE_TARGET_LABELS = {
+  config: "配置层",
+  workspace: "Workspace 层",
+  extensions: "扩展层",
 };
+
+let dimensionLabels = { ...FALLBACK_DIMENSION_LABELS };
+let dimensionGroups = [...FALLBACK_DIMENSION_GROUPS];
+let changeTargetLabels = { ...FALLBACK_CHANGE_TARGET_LABELS };
 
 function formatDimensionLabel(value) {
-  return DIMENSION_LABELS[value] || value;
+  return dimensionLabels[value] || value;
 }
 
 function formatChangeTargetLabel(value) {
-  return CHANGE_TARGET_LABELS[value] || value;
+  return changeTargetLabels[value] || value;
 }
 
 function stripLeadingTimestamp(text) {
@@ -858,6 +914,19 @@ function loadString(key, fallback = "") {
   return fallback;
 }
 
+function loadNumber(key, fallback = 0) {
+  try {
+    const raw = localStorage.getItem(key);
+    const value = Number(raw);
+    if (Number.isFinite(value)) {
+      return value;
+    }
+  } catch {
+    // ignore
+  }
+  return fallback;
+}
+
 function persistBoolean(key, value) {
   try {
     localStorage.setItem(key, value ? "true" : "false");
@@ -898,26 +967,132 @@ function persistStringSet(key, value) {
   }
 }
 
+function hasStoredValue(key) {
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return false;
+  }
+}
+
+function parseCommaList(value) {
+  if (typeof value !== "string") {
+    return [];
+  }
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function formatCommaList(values) {
+  if (!Array.isArray(values)) {
+    return "";
+  }
+  return values.filter((entry) => typeof entry === "string" && entry.trim()).join(", ");
+}
+
 state.selectedTaskIds = loadSelectedTaskIds();
 state.filters = loadStringSet(FILTERS_KEY, DEFAULT_FILTERS);
 state.sidebarHidden = loadBoolean(SIDEBAR_HIDDEN_KEY, false);
-state.evolutionDimensions = loadStringSet(EVOLUTION_DIMENSIONS_KEY, [
-  "per_task_tool_quality",
-  "cross_task_patterns",
-]);
-state.evolutionChangeTargets = loadStringSet(EVOLUTION_CHANGE_TARGETS_KEY, [
-  "openclaw_config",
-  "agent_persona",
-  "hooks",
-  "plugins",
-  "skills",
-]);
+const FALLBACK_DIMENSION_IDS = Object.keys(FALLBACK_DIMENSION_LABELS);
+const FALLBACK_CHANGE_TARGET_IDS = Object.keys(FALLBACK_CHANGE_TARGET_LABELS);
+state.evolutionDimensions = loadStringSet(EVOLUTION_DIMENSIONS_KEY, FALLBACK_DIMENSION_IDS);
+state.evolutionChangeTargets = loadStringSet(EVOLUTION_CHANGE_TARGETS_KEY, FALLBACK_CHANGE_TARGET_IDS);
 state.evolutionUseSearch = loadBoolean(EVOLUTION_USE_SEARCH_KEY, false);
+state.evolutionScopeDays = loadNumber(EVOLUTION_SCOPE_DAYS_KEY, 5);
+state.evolutionAgentIds = parseCommaList(loadString(EVOLUTION_AGENT_IDS_KEY, ""));
+state.evolutionFocus = loadString(EVOLUTION_FOCUS_KEY, "");
 state.evolutionHistoryScope = loadString(EVOLUTION_HISTORY_SCOPE_KEY, "all") === "selection"
   ? "selection"
   : "all";
 state.evolutionActiveReportId = loadString(EVOLUTION_ACTIVE_REPORT_KEY, "") || null;
 state.appliedChanges = loadStringSet(EVOLUTION_APPLIED_CHANGES_KEY, []);
+
+function coerceSelection(current, allowed, fallback) {
+  const next = new Set();
+  current.forEach((entry) => {
+    if (allowed.has(entry)) {
+      next.add(entry);
+    }
+  });
+  if (next.size === 0) {
+    fallback.forEach((entry) => next.add(entry));
+  }
+  return next;
+}
+
+function applyEvolutionOptions(options) {
+  if (!options || typeof options !== "object") {
+    return;
+  }
+  if (Array.isArray(options.dimensionGroups) && options.dimensionGroups.length > 0) {
+    dimensionGroups = options.dimensionGroups;
+  }
+  if (options.dimensionLabels && typeof options.dimensionLabels === "object") {
+    dimensionLabels = { ...dimensionLabels, ...options.dimensionLabels };
+  }
+  if (options.changeTargetLabels && typeof options.changeTargetLabels === "object") {
+    changeTargetLabels = { ...changeTargetLabels, ...options.changeTargetLabels };
+  }
+
+  const defaults = options.defaults && typeof options.defaults === "object" ? options.defaults : {};
+  const allowedDimensions = new Set(Object.keys(dimensionLabels));
+  const allowedTargets = new Set(Object.keys(changeTargetLabels));
+  const defaultDimensions = Array.isArray(defaults.dimensions)
+    ? defaults.dimensions.filter((entry) => allowedDimensions.has(entry))
+    : FALLBACK_DIMENSION_IDS;
+  const defaultTargets = Array.isArray(defaults.changeTargets)
+    ? defaults.changeTargets.filter((entry) => allowedTargets.has(entry))
+    : FALLBACK_CHANGE_TARGET_IDS;
+
+  const nextDimensions = coerceSelection(state.evolutionDimensions, allowedDimensions, defaultDimensions);
+  const nextTargets = coerceSelection(state.evolutionChangeTargets, allowedTargets, defaultTargets);
+  state.evolutionDimensions = nextDimensions;
+  state.evolutionChangeTargets = nextTargets;
+  persistStringSet(EVOLUTION_DIMENSIONS_KEY, state.evolutionDimensions);
+  persistStringSet(EVOLUTION_CHANGE_TARGETS_KEY, state.evolutionChangeTargets);
+
+  if (!hasStoredValue(EVOLUTION_USE_SEARCH_KEY)) {
+    state.evolutionUseSearch = defaults.useSearch === true;
+    persistBoolean(EVOLUTION_USE_SEARCH_KEY, state.evolutionUseSearch);
+  }
+
+  if (!hasStoredValue(EVOLUTION_SCOPE_DAYS_KEY)) {
+    const value = Number(defaults.scopeDays);
+    if (Number.isFinite(value) && value > 0) {
+      state.evolutionScopeDays = Math.floor(value);
+      persistString(EVOLUTION_SCOPE_DAYS_KEY, state.evolutionScopeDays);
+    }
+  }
+
+  if (!hasStoredValue(EVOLUTION_AGENT_IDS_KEY) && Array.isArray(defaults.agentIds)) {
+    state.evolutionAgentIds = defaults.agentIds;
+    persistString(EVOLUTION_AGENT_IDS_KEY, formatCommaList(state.evolutionAgentIds));
+  }
+
+  if (!hasStoredValue(EVOLUTION_FOCUS_KEY) && Array.isArray(defaults.focus)) {
+    state.evolutionFocus = defaults.focus.join(", ");
+    persistString(EVOLUTION_FOCUS_KEY, state.evolutionFocus);
+  }
+}
+
+state.evolutionDimensions = coerceSelection(
+  state.evolutionDimensions,
+  new Set(FALLBACK_DIMENSION_IDS),
+  FALLBACK_DIMENSION_IDS,
+);
+state.evolutionChangeTargets = coerceSelection(
+  state.evolutionChangeTargets,
+  new Set(FALLBACK_CHANGE_TARGET_IDS),
+  FALLBACK_CHANGE_TARGET_IDS,
+);
+persistStringSet(EVOLUTION_DIMENSIONS_KEY, state.evolutionDimensions);
+persistStringSet(EVOLUTION_CHANGE_TARGETS_KEY, state.evolutionChangeTargets);
+if (!Number.isFinite(state.evolutionScopeDays) || state.evolutionScopeDays <= 0) {
+  state.evolutionScopeDays = 5;
+  persistString(EVOLUTION_SCOPE_DAYS_KEY, state.evolutionScopeDays);
+}
 
 function formatJsonValue(value) {
   if (typeof value === "string") {
@@ -2196,7 +2371,7 @@ function renderEvolutionView() {
   configTitle.textContent = "Analyzer";
   const configMeta = document.createElement("div");
   configMeta.className = "evo-block-meta";
-  configMeta.textContent = "Dimensions, targets, options";
+  configMeta.textContent = "Dimensions, scope, options";
   configTop.appendChild(configTitle);
   configTop.appendChild(configMeta);
   configBlock.appendChild(configTop);
@@ -2218,25 +2393,52 @@ function renderEvolutionView() {
     return wrapper;
   };
 
-  const dimWrap = document.createElement("div");
-  dimWrap.className = "evo-toggle-wrap";
-  Object.keys(DIMENSION_LABELS).forEach((key) => {
-    dimWrap.appendChild(
-      makeToggle(formatDimensionLabel(key), state.evolutionDimensions.has(key), (on) => {
-        if (on) {
-          state.evolutionDimensions.add(key);
-        } else {
-          state.evolutionDimensions.delete(key);
-        }
-        persistStringSet(EVOLUTION_DIMENSIONS_KEY, state.evolutionDimensions);
-      }),
-    );
+  const makeField = (label, input, hint) => {
+    const wrapper = document.createElement("label");
+    wrapper.className = "evo-field";
+    const title = document.createElement("span");
+    title.className = "evo-field-label";
+    title.textContent = label;
+    wrapper.appendChild(title);
+    wrapper.appendChild(input);
+    if (hint) {
+      const help = document.createElement("span");
+      help.className = "evo-field-hint";
+      help.textContent = hint;
+      wrapper.appendChild(help);
+    }
+    return wrapper;
+  };
+
+  dimensionGroups.forEach((group) => {
+    const groupWrap = document.createElement("div");
+    groupWrap.className = "evo-dim-group";
+    const groupTitle = document.createElement("div");
+    groupTitle.className = "evo-dim-title";
+    groupTitle.textContent = group.label || group.id;
+    groupWrap.appendChild(groupTitle);
+
+    const dimWrap = document.createElement("div");
+    dimWrap.className = "evo-toggle-wrap";
+    group.items.forEach((key) => {
+      dimWrap.appendChild(
+        makeToggle(formatDimensionLabel(key), state.evolutionDimensions.has(key), (on) => {
+          if (on) {
+            state.evolutionDimensions.add(key);
+          } else {
+            state.evolutionDimensions.delete(key);
+          }
+          persistStringSet(EVOLUTION_DIMENSIONS_KEY, state.evolutionDimensions);
+        }),
+      );
+    });
+    groupWrap.appendChild(dimWrap);
+    configBlock.appendChild(groupWrap);
   });
-  configBlock.appendChild(dimWrap);
 
   const targetWrap = document.createElement("div");
   targetWrap.className = "evo-toggle-wrap";
-  Object.keys(CHANGE_TARGET_LABELS).forEach((key) => {
+  Object.keys(changeTargetLabels).forEach((key) => {
     targetWrap.appendChild(
       makeToggle(formatChangeTargetLabel(key), state.evolutionChangeTargets.has(key), (on) => {
         if (on) {
@@ -2249,6 +2451,46 @@ function renderEvolutionView() {
     );
   });
   configBlock.appendChild(targetWrap);
+
+  const scopeWrap = document.createElement("div");
+  scopeWrap.className = "evo-scope-grid";
+
+  const daysInput = document.createElement("input");
+  daysInput.type = "number";
+  daysInput.min = "1";
+  daysInput.step = "1";
+  daysInput.className = "evo-input";
+  daysInput.value = String(state.evolutionScopeDays || 5);
+  daysInput.addEventListener("change", () => {
+    const next = Math.max(1, Number.parseInt(daysInput.value, 10) || 5);
+    state.evolutionScopeDays = next;
+    persistString(EVOLUTION_SCOPE_DAYS_KEY, next);
+  });
+  scopeWrap.appendChild(makeField("Scope days", daysInput, "Look-back window for analysis context."));
+
+  const agentInput = document.createElement("input");
+  agentInput.type = "text";
+  agentInput.className = "evo-input";
+  agentInput.placeholder = "Agent ids, comma-separated (blank = all)";
+  agentInput.value = formatCommaList(state.evolutionAgentIds);
+  agentInput.addEventListener("input", () => {
+    state.evolutionAgentIds = parseCommaList(agentInput.value);
+    persistString(EVOLUTION_AGENT_IDS_KEY, agentInput.value);
+  });
+  scopeWrap.appendChild(makeField("Agent scope", agentInput, "Filter analysis by agent id if needed."));
+
+  const focusInput = document.createElement("input");
+  focusInput.type = "text";
+  focusInput.className = "evo-input";
+  focusInput.placeholder = "Optional focus topics (comma-separated)";
+  focusInput.value = state.evolutionFocus || "";
+  focusInput.addEventListener("input", () => {
+    state.evolutionFocus = focusInput.value.trim();
+    persistString(EVOLUTION_FOCUS_KEY, state.evolutionFocus);
+  });
+  scopeWrap.appendChild(makeField("Focus", focusInput, "Optional focus or problem themes."));
+
+  configBlock.appendChild(scopeWrap);
 
   const optionsWrap = document.createElement("div");
   optionsWrap.className = "evo-toggle-wrap";
@@ -2326,9 +2568,26 @@ function renderEvolutionView() {
   const detailDims = (report.dimensions || []).map(formatDimensionLabel).join(" · ");
   const detailTargets = (report.changeTargets || []).map(formatChangeTargetLabel).join(" · ");
   const detailSearchFlag = report.useSearch ? "search:on" : "search:off";
-  detailMeta.textContent = `${formatTaskTime(report.createdAt)} · ${detailDims || "no dimensions"} · ${
-    detailTargets || "no targets"
-  } · ${detailSearchFlag}`;
+  const scopeParts = [];
+  if (report.analysisScope?.scopeDays) {
+    scopeParts.push(`${report.analysisScope.scopeDays}d`);
+  }
+  if (Array.isArray(report.analysisScope?.agentIds) && report.analysisScope.agentIds.length > 0) {
+    scopeParts.push(`agents:${report.analysisScope.agentIds.join(",")}`);
+  }
+  if (Array.isArray(report.analysisScope?.focus) && report.analysisScope.focus.length > 0) {
+    scopeParts.push(`focus:${report.analysisScope.focus.join(",")}`);
+  }
+  const scopeLabel = scopeParts.length > 0 ? `scope:${scopeParts.join(" | ")}` : "";
+  detailMeta.textContent = [
+    formatTaskTime(report.createdAt),
+    detailDims || "no dimensions",
+    detailTargets || "no targets",
+    detailSearchFlag,
+    scopeLabel,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   detailHeader.appendChild(detailMeta);
 
   const detailActions = document.createElement("div");
@@ -2934,6 +3193,19 @@ async function loadAnalyses() {
   }
 }
 
+async function loadEvolutionOptions() {
+  try {
+    const res = await fetch("/api/evolution/options");
+    const data = await res.json();
+    applyEvolutionOptions(data);
+    renderSidebar();
+    renderDetailPanel();
+    renderEvolutionView();
+  } catch {
+    // ignore
+  }
+}
+
 async function loadEvolutionReports() {
   try {
     const res = await fetch("/api/evolution/reports");
@@ -2966,10 +3238,19 @@ async function runEvolutionAnalysis() {
   state.evolutionNotice = "";
   renderEvolutionView();
   try {
+    const focus = parseCommaList(state.evolutionFocus || "");
     const res = await fetch("/api/evolution/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ taskIds, dimensions, changeTargets, useSearch: state.evolutionUseSearch }),
+      body: JSON.stringify({
+        taskIds,
+        dimensions,
+        changeTargets,
+        useSearch: state.evolutionUseSearch,
+        scopeDays: state.evolutionScopeDays,
+        agentIds: state.evolutionAgentIds,
+        focus,
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -3511,5 +3792,6 @@ wireFilters();
 loadSessions();
 loadTasks();
 loadAnalyses();
+loadEvolutionOptions();
 loadEvolutionReports();
 renderTimeline();

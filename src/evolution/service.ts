@@ -8,10 +8,8 @@ import { analyzeEvolutionReport } from "./evolution-analyzer.js";
 import {
   EVOLUTION_CHANGE_TARGETS,
   EVOLUTION_DIMENSIONS,
-  type EvolutionChangeTarget,
-  type EvolutionDimension,
-  type EvolutionReportRecord,
-} from "./types.js";
+} from "./analysis-options.js";
+import type { EvolutionChangeTarget, EvolutionDimension, EvolutionReportRecord } from "./types.js";
 import { appendEvolutionReports, loadEvolutionReports } from "./report-store.js";
 import {
   loadOpenClawConfig,
@@ -136,6 +134,9 @@ export async function runEvolutionAnalysis(params: {
   taskIds: string[];
   dimensions: EvolutionDimension[];
   changeTargets: EvolutionChangeTarget[];
+  analysisScopeDays?: number;
+  analysisAgentIds?: string[];
+  analysisFocus?: string[];
   analysisAgentId: string;
   useSearch?: boolean;
 }): Promise<EvolutionReportRecord> {
@@ -143,6 +144,16 @@ export async function runEvolutionAnalysis(params: {
   const evolveConfigPath = params.evolveConfigPath ? path.resolve(params.evolveConfigPath) : undefined;
   const evolveConfig = loadEvolveConfig({ stateDir, configPath: evolveConfigPath });
   const timeoutSeconds = evolveConfig.analysisTimeoutSeconds ?? 120;
+  const analysisDefaults = evolveConfig.evolutionAnalysis;
+  const dimensions = params.dimensions.length > 0 ? params.dimensions : analysisDefaults.dimensions;
+  const changeTargets =
+    params.changeTargets.length > 0 ? params.changeTargets : analysisDefaults.changeTargets;
+  const analysisScope = {
+    scopeDays: params.analysisScopeDays ?? analysisDefaults.scopeDays,
+    agentIds: params.analysisAgentIds ?? analysisDefaults.agentIds,
+    focus: params.analysisFocus ?? analysisDefaults.focus,
+  };
+  const useSearch = params.useSearch ?? analysisDefaults.useSearch;
 
   const openclawConfigPath = resolveOpenClawConfigPath(stateDir, params.openclawConfigPath);
   ensureEvolutionAgent({ stateDir, configPath: openclawConfigPath });
@@ -192,9 +203,10 @@ export async function runEvolutionAnalysis(params: {
       stateDir,
       analysisAgentId: params.analysisAgentId,
       timeoutSeconds,
-      dimensions: params.dimensions,
-      changeTargets: params.changeTargets,
-      useSearch: params.useSearch ?? false,
+      dimensions,
+      changeTargets,
+      analysisScope,
+      useSearch,
       allowedPaths,
       openclawConfigPath,
       workspacePaths,

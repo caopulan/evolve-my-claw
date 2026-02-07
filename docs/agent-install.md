@@ -77,7 +77,36 @@ node dist/cli.js parse
   "excludeAgentIds": ["evolve-my-claw"],
   "excludeTools": ["message/send", "message/thread-reply"],
   "analysisAgentId": "evolve-my-claw",
-  "analysisTimeoutSeconds": 120
+  "analysisTimeoutSeconds": 120,
+  "evolutionAnalysis": {
+    "scopeDays": 5,
+    "agentIds": [],
+    "focus": [],
+    "dimensions": [
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6",
+      "C7",
+      "C8",
+      "C9",
+      "C10",
+      "C11",
+      "W1",
+      "W2",
+      "W3",
+      "W4",
+      "W5",
+      "E1",
+      "E2",
+      "E3",
+      "E4"
+    ],
+    "changeTargets": ["config", "workspace", "extensions"],
+    "useSearch": false
+  }
 }
 ```
 
@@ -124,6 +153,8 @@ node dist/cli.js evolution
 ```
 
 每条修改建议可在 UI 中点击执行（安全的配置 merge patch + 文件修改）。
+
+提示：如果升级了分析维度/配置（例如切换到 self-evolution 维度集），建议删除旧的 `evolution.reports.jsonl` 以避免旧格式干扰展示。
 
 ## 规则驱动改进（推荐）
 

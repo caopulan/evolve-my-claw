@@ -348,6 +348,19 @@ function groupKeyForChange(change: EvolutionChange): string {
   return "workspace";
 }
 
+function defaultDimensionForGroup(groupKey?: string): EvolutionReportItem["dimension"] {
+  if (groupKey === "skills") {
+    return "E1";
+  }
+  if (groupKey === "hooks") {
+    return "E3";
+  }
+  if (groupKey === "workspace") {
+    return "W1";
+  }
+  return "C2";
+}
+
 function groupTitleSuffix(groupKey: string): string {
   if (groupKey === "config") {
     return " (config)";
@@ -428,7 +441,7 @@ export function evaluateEvolutionRules(params: {
         itemId: `item-${stableId(`rule:${finding.ruleId}:actions`)}`,
         scope: finding.scope,
         taskId: matchedTaskId,
-        dimension: "change_recommendation",
+        dimension: defaultDimensionForGroup(),
         severity: finding.severity,
         title: finding.title,
         reasoning: `命中规则 \`${finding.ruleId}\`，但该规则没有生成可自动落盘的 changes。`,
@@ -455,7 +468,7 @@ export function evaluateEvolutionRules(params: {
         itemId: `item-${stableId(`rule:${finding.ruleId}:${groupKey}`)}`,
         scope: finding.scope,
         taskId: matchedTaskId,
-        dimension: "change_recommendation",
+        dimension: defaultDimensionForGroup(groupKey),
         severity: finding.severity,
         title,
         reasoning: `命中规则 \`${finding.ruleId}\`，并生成一组可落盘的 changes（${groupKey}）。`,
@@ -491,4 +504,3 @@ export function formatRuleFindingsForPrompt(findings: RuleFinding[], maxChars = 
   }));
   return truncateText(JSON.stringify(compact, null, 2), maxChars);
 }
-

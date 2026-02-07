@@ -269,6 +269,32 @@ function ensureWorkspaceFiles(params: {
   };
 }
 
+function ensureSelfEvolutionSkill(workspaceDir: string): { updated: boolean; note?: string } {
+  const sourceDir = path.join(process.cwd(), "skills", "self-evolution");
+  const sourceFile = path.join(sourceDir, "SKILL.md");
+  if (!fs.existsSync(sourceFile)) {
+    return { updated: false, note: "self-evolution skill not found in repo; skipped sync." };
+  }
+  const targetDir = path.join(workspaceDir, "skills", "self-evolution");
+  const targetFile = path.join(targetDir, "SKILL.md");
+  let shouldCopy = true;
+  if (fs.existsSync(targetFile)) {
+    try {
+      const sourceRaw = fs.readFileSync(sourceFile, "utf8");
+      const targetRaw = fs.readFileSync(targetFile, "utf8");
+      shouldCopy = sourceRaw !== targetRaw;
+    } catch {
+      shouldCopy = true;
+    }
+  }
+  if (!shouldCopy) {
+    return { updated: false };
+  }
+  fs.mkdirSync(targetDir, { recursive: true });
+  fs.cpSync(sourceDir, targetDir, { recursive: true });
+  return { updated: true };
+}
+
 function evolutionGuidanceBlock(): string {
   return [
     "",
@@ -369,6 +395,7 @@ export function ensureEvolutionAgent(
     copySkills: params.copySkills ?? true,
   });
 
+  const skillSync = ensureSelfEvolutionSkill(workspaceDir);
   const appendedGuidance = maybeAppendEvolutionGuidance(workspaceDir);
 
   const agentFiles = ensureAgentDirFiles({
@@ -377,6 +404,12 @@ export function ensureEvolutionAgent(
   });
 
   const notes: string[] = [];
+  if (skillSync.note) {
+    notes.push(skillSync.note);
+  }
+  if (skillSync.updated) {
+    notes.push("Synced self-evolution skill into evolve-my-claw workspace.");
+  }
   if (workspace.copiedSkillsDir) {
     notes.push("Copied workspace skills from source agent.");
   }

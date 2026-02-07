@@ -59,7 +59,36 @@ Example:
   "excludeAgentIds": ["evolve-my-claw"],
   "excludeTools": ["message/send", "message/thread-reply"],
   "analysisAgentId": "evolve-my-claw",
-  "analysisTimeoutSeconds": 120
+  "analysisTimeoutSeconds": 120,
+  "evolutionAnalysis": {
+    "scopeDays": 5,
+    "agentIds": [],
+    "focus": [],
+    "dimensions": [
+      "C1",
+      "C2",
+      "C3",
+      "C4",
+      "C5",
+      "C6",
+      "C7",
+      "C8",
+      "C9",
+      "C10",
+      "C11",
+      "W1",
+      "W2",
+      "W3",
+      "W4",
+      "W5",
+      "E1",
+      "E2",
+      "E3",
+      "E4"
+    ],
+    "changeTargets": ["config", "workspace", "extensions"],
+    "useSearch": false
+  }
 }
 ```
 
@@ -104,6 +133,8 @@ Reports are written to:
 ```
 
 Each change can be applied from the UI (safe, scoped file operations + config merge patches).
+
+Note: If you upgrade evolution analysis dimensions/config (e.g. switching to the self-evolution dimension set), delete the old `evolution.reports.jsonl` to avoid stale schema conflicts.
 
 ## Notes
 

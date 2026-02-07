@@ -1,18 +1,6 @@
-export const EVOLUTION_DIMENSIONS = [
-  "per_task_tool_quality",
-  "cross_task_patterns",
-] as const;
+import { EVOLUTION_CHANGE_TARGETS, EVOLUTION_DIMENSIONS } from "./analysis-options.js";
 
 export type EvolutionDimension = (typeof EVOLUTION_DIMENSIONS)[number];
-
-export const EVOLUTION_CHANGE_TARGETS = [
-  "openclaw_config",
-  "agent_persona",
-  "hooks",
-  "plugins",
-  "skills",
-] as const;
-
 export type EvolutionChangeTarget = (typeof EVOLUTION_CHANGE_TARGETS)[number];
 
 export type EvolutionChangeOperation =
@@ -67,7 +55,7 @@ export type EvolutionReportItem = {
   itemId: string;
   scope: "task" | "multi";
   taskId?: string;
-  dimension: EvolutionDimension | "change_recommendation";
+  dimension: EvolutionDimension;
   severity: "low" | "medium" | "high";
   title: string;
   /** Optional rule ids that this item addresses (rule-driven evolution mode). */
@@ -92,6 +80,11 @@ export type EvolutionReportRecord = {
   taskIds: string[];
   dimensions: EvolutionDimension[];
   changeTargets: EvolutionChangeTarget[];
+  analysisScope?: {
+    scopeDays?: number;
+    agentIds?: string[];
+    focus?: string[];
+  };
   useSearch?: boolean;
   ruleEngine?: {
     matchedRuleIds: string[];
