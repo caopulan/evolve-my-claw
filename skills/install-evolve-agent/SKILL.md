@@ -23,7 +23,7 @@ description: >
 
 ## 约束（必须遵守）
 
-- 对 `~/.openclaw/openclaw.json` 的任何改动必须先备份。
+- 对 OpenClaw 配置文件的任何改动必须先备份（配置文件路径以实际探测结果为准）。
 - 不删除/改坏现有 agent 配置；只做“新增或补齐字段”的最小改动。
 - 不写入任何 secret 到配置或文件。
 - 如果你无法安全地自动编辑配置（结构不一致/不确定插入点），停止并向用户要确认或请用户手工粘贴补丁。
@@ -56,7 +56,9 @@ description: >
 1. 备份配置文件（用 `exec`）：
 
 ```bash
-cp ~/.openclaw/openclaw.json ~/.openclaw/openclaw.json.bak.evolve.$(date +%Y%m%d-%H%M%S)
+# 用你在 Step 0 里确认的真实配置文件路径替换下面的 CONFIG_PATH
+CONFIG_PATH=~/.openclaw/openclaw.json
+cp "$CONFIG_PATH" "$CONFIG_PATH.bak.evolve.$(date +%Y%m%d-%H%M%S)"
 ```
 
 2. 在 `agents.list` 中新增或更新 evolve agent 条目（最小改动；不要动其它 agent）。
@@ -227,7 +229,6 @@ openclaw agent --agent evolve --message "执行进化分析"
 ## 最终输出（你回复用户时必须包含）
 
 - 你修改/新增了哪些文件（路径 + 简述）
-- openclaw.json 是否已备份，备份文件名
+- 配置文件是否已备份，备份文件名（含真实路径）
 - evolve agent 的 id 与 workspace 路径
 - 下一步验证命令（如上）
-
