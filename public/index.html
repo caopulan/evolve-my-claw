@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark light" />
+    <meta name="color-scheme" content="light" />
     <title>Evolve My Claw</title>
     <link
       rel="stylesheet"
@@ -58,10 +58,15 @@
       <main class="main">
         <div class="toolbar">
           <div class="toolbar-left">
-            <div class="title-stack">
-              <h2 id="session-title">Select a session</h2>
-              <p id="session-subtitle" class="muted"></p>
-            </div>
+            <button id="sidebar-toggle" class="toolbar-icon-button" type="button" aria-label="Toggle sessions">
+              <span aria-hidden="true">☰</span>
+            </button>
+            <label class="top-search">
+              <span class="sr-only">Search timeline</span>
+              <input id="search" type="search" placeholder="Search this session timeline..." />
+            </label>
+          </div>
+          <div class="toolbar-right">
             <div class="view-switch" data-active="task" role="tablist" aria-label="Panel">
               <button
                 class="view-option active"
@@ -87,12 +92,6 @@
                 <span class="view-indicator-label">Timeline</span>
               </span>
             </div>
-          </div>
-          <div class="toolbar-right">
-            <button id="sidebar-toggle" class="toolbar-button" type="button">
-              <span class="toolbar-button-icon" aria-hidden="true">Menu</span>
-              <span class="toolbar-button-label">Sessions</span>
-            </button>
             <button id="cmdk-open" class="toolbar-button" type="button">
               <span class="toolbar-button-icon" aria-hidden="true">Ctrl K</span>
               <span class="toolbar-button-label">Command</span>
@@ -103,14 +102,17 @@
             </button>
           </div>
         </div>
+        <section class="hero" aria-label="Active session">
+          <div class="hero-card">
+            <div class="hero-kicker">OPENCLAW SESSION</div>
+            <h2 id="session-title">Select a session</h2>
+            <p id="session-subtitle" class="muted"></p>
+          </div>
+        </section>
         <section id="task-view" class="view active">
           <div class="content-grid">
             <div class="timeline-column">
               <div class="timeline-toolbar">
-                <label class="search-wrap">
-                  <span class="search-label">Search</span>
-                  <input id="search" type="search" placeholder="Search timeline" />
-                </label>
                 <div class="timeline-meta">
                   <div id="timeline-count" class="timeline-count" aria-live="polite"></div>
                   <button id="clear-focus" class="pill-button" type="button" hidden>
@@ -188,13 +190,41 @@
                 <div id="timeline" class="timeline"></div>
               </section>
             </div>
-            <aside class="detail-panel" id="detail-panel">
-              <div class="detail-header">
-                <span class="detail-label">Selection</span>
-                <h3 id="detail-title">Task Detail</h3>
-                <p id="detail-subtitle" class="muted"></p>
-              </div>
-              <div class="detail-body" id="detail-body"></div>
+            <aside class="right-rail" aria-label="Insights">
+              <section class="stats-panel" aria-label="Session statistics">
+                <div class="detail-header stats-header">
+                  <span class="detail-label">Statistic</span>
+                  <h3>Session snapshot</h3>
+                  <p class="muted" id="stats-subtitle">Select a session to populate metrics.</p>
+                </div>
+                <div class="stats-grid">
+                  <div class="stat-tile">
+                    <div class="stat-value" id="stat-events-visible">-</div>
+                    <div class="stat-label">Visible</div>
+                  </div>
+                  <div class="stat-tile">
+                    <div class="stat-value" id="stat-events-total">-</div>
+                    <div class="stat-label">Total</div>
+                  </div>
+                  <div class="stat-tile">
+                    <div class="stat-value" id="stat-tools">-</div>
+                    <div class="stat-label">Tools</div>
+                  </div>
+                  <div class="stat-tile">
+                    <div class="stat-value" id="stat-messages">-</div>
+                    <div class="stat-label">Messages</div>
+                  </div>
+                </div>
+                <div class="stats-note" id="stats-note"></div>
+              </section>
+              <section class="detail-panel" id="detail-panel" aria-label="Selection detail">
+                <div class="detail-header">
+                  <span class="detail-label">Selection</span>
+                  <h3 id="detail-title">Task Detail</h3>
+                  <p id="detail-subtitle" class="muted"></p>
+                </div>
+                <div class="detail-body" id="detail-body"></div>
+              </section>
             </aside>
           </div>
         </section>
