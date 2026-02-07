@@ -24,6 +24,7 @@ description: >
 ## 约束（必须遵守）
 
 - 对 OpenClaw 配置文件的任何改动必须先备份（配置文件路径以实际探测结果为准）。
+- 如需修改 OpenClaw 配置文件（JSON5），优先安装并使用 [openclaw-configure](https://github.com/caopulan/openclaw-configure) 提供的 `openclaw-config` skill 来执行修改与校验（避免手工编辑导致 schema 校验失败、Gateway 无法启动）。
 - 不删除/改坏现有 agent 配置；只做“新增或补齐字段”的最小改动。
 - 不写入任何 secret 到配置或文件。
 - 如果你无法安全地自动编辑配置（结构不一致/不确定插入点），停止并向用户要确认或请用户手工粘贴补丁。
@@ -52,6 +53,20 @@ description: >
 若不存在：停止并提示用户先安装该 skill（把本仓库的 `skills/self-evolution/SKILL.md` 复制到该路径）。
 
 ### Step 1：备份并更新 OpenClaw 配置
+
+0. (推荐) 安装并使用 `openclaw-config` skill 来修改配置
+
+如果你需要新增/修改 `agents.*` 配置（例如添加 `agents.list[].id="evolve"`），先安装并使用 `openclaw-config` skill：
+
+```bash
+git clone https://github.com/caopulan/openclaw-configure.git
+cd openclaw-configure
+
+mkdir -p ~/.codex/skills/openclaw-config
+rsync -a skills/openclaw-config/ ~/.codex/skills/openclaw-config/
+```
+
+然后在 Codex 里调用 skill：`openclaw-config`，按它的 schema-first 流程完成修改，并用 `openclaw doctor` 验证。
 
 1. 备份配置文件（用 `exec`）：
 
