@@ -105,6 +105,12 @@ function isAnalysisPromptMessage(text: string): boolean {
   if (lowered.includes("openclaw 任务分析器")) {
     return true;
   }
+  if (text.includes("SELF_EVOLUTION_TASK_ANALYSIS")) {
+    return true;
+  }
+  if (lowered.includes("task candidate analysis")) {
+    return true;
+  }
   if (lowered.includes("task_id:") && lowered.includes("json schema")) {
     return true;
   }

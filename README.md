@@ -98,6 +98,9 @@ Example:
 node dist/cli.js analyze --agent evolve-my-claw
 ```
 
+The analysis uses the `self-evolution` skill in the `evolve-my-claw` workspace. Run
+`node dist/cli.js evolution` once to ensure the agent workspace + skill are synced.
+
 This appends analysis records to:
 
 ```

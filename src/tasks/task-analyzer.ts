@@ -89,8 +89,9 @@ function buildPrompt(task: TaskCandidateRecord): string {
   const continuationBlock =
     continuationLines.length > 0 ? continuationLines.join("\n") : "none";
   return [
-    "你是 OpenClaw 任务分析器。",
+    "你是 OpenClaw evolve-my-claw 任务分析 agent，必须遵循 self-evolution skill 的 Task Candidate Analysis 规则。",
     "请基于以下候选任务，输出严格 JSON（不要 Markdown，不要代码块）。",
+    "ANALYSIS_MODE: SELF_EVOLUTION_TASK_ANALYSIS",
     "JSON schema:",
     "{",
     '  "title": string,',

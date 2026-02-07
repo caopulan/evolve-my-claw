@@ -124,6 +124,14 @@ node dist/cli.js parse
 node dist/cli.js analyze --agent evolve-my-claw
 ```
 
+该分析会使用 `self-evolution` skill。建议先运行一次：
+
+```bash
+node dist/cli.js evolution
+```
+
+确保 `evolve-my-claw` workspace 中已同步该 skill。
+
 如果 gateway 需要认证：
 
 ```bash

@@ -297,7 +297,7 @@ program
           analysisAgentId,
           timeoutSeconds,
           extraSystemPrompt:
-            "Only respond with JSON. Do not use tools. Do not include Markdown or code fences.",
+            "Only respond with JSON. Follow the self-evolution skill Task Candidate Analysis section. Use tools only when needed. Do not include Markdown or code fences.",
         });
         analyzed += 1;
         if (!opts.dryRun) {

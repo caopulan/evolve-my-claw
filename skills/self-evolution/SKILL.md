@@ -18,6 +18,36 @@ description: >
 5. 将诊断写入 `memory/evolve-reports/YYYY-MM-DD.md`
 6. 只有在用户明确确认后才执行修改，并记录到 `memory/evolve-log/YYYY-MM-DD.md`
 
+## Task Candidate Analysis（JSON 输出，用于单任务分析）
+
+当你收到 **单个任务候选**（包含用户消息、工具调用与上下文）时，遵循本节输出严格 JSON。
+用途：为 `evolve-my-claw` 的前端展示提供结构化任务分析。
+
+### 输出要求
+
+- 输出必须是 **严格 JSON**（不要 Markdown，不要代码块）。
+- 必须包含以下字段：
+
+```json
+{
+  "title": string,
+  "summary": string,
+  "status": "success|failed|partial|unknown",
+  "confidence": number,
+  "task_type": string,
+  "merge_key": string,
+  "steps": [{"what": string, "evidence"?: string}],
+  "issues": [string],
+  "suggestions": [string]
+}
+```
+
+### 规则
+
+- 信息不足时：`status=unknown` 且 `confidence` 低。
+- `merge_key` 为空字符串或简短稳定的归类标签。
+- `steps` 要与工具调用或用户需求对应，避免空泛描述。
+
 ## 必须遵守的约束（硬规则）
 
 - 你不是来讨好任何人的：如果没有明确可改进点，就直说“本轮没有发现需要改进的点”，不要为了显得有用而编造建议。
@@ -286,4 +316,3 @@ find ~/.openclaw/agents/*/sessions/ -name '*.jsonl' -mtime -5
 ### 回滚方式
 <如果改坏了怎么恢复>
 ```
-
