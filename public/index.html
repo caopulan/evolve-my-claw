@@ -12,62 +12,21 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <div class="app">
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <div class="brand">
-            <div class="brand-mark">EMC</div>
-            <div class="brand-text">
-              <h1>Evolve My Claw</h1>
-              <p>OpenClaw signal archive</p>
+    <div class="app-shell">
+      <div class="app">
+        <aside class="sidebar">
+          <div class="sidebar-header">
+            <div class="brand">
+              <div class="brand-mark">EMC</div>
+              <div class="brand-text">
+                <h1>Evolve My Claw</h1>
+                <p>OpenClaw signal archive</p>
+              </div>
             </div>
           </div>
-        </div>
-        <div class="sidebar-tools">
-          <div class="sidebar-search-row">
-            <label class="sidebar-search">
-              <span class="sr-only">Search sessions</span>
-              <input id="session-search" type="search" placeholder="Search sessions or tasks" />
-            </label>
-            <button
-              id="parse-tasks"
-              class="sidebar-action"
-              type="button"
-              title="Parse task candidates"
-            >
-              Parse
-            </button>
-            <button
-              id="analyze-tasks"
-              class="sidebar-action"
-              type="button"
-              title="Analyze pending tasks with OpenClaw"
-            >
-              Analyze
-            </button>
-          </div>
-          <div class="sidebar-hint" id="sidebar-hint"></div>
-        </div>
-        <div class="sidebar-section">
-          <div id="sessions" class="session-list"></div>
-        </div>
-        <div class="sidebar-footer">
-          <p>Local timeline viewer. No OpenClaw repo changes required.</p>
-        </div>
-      </aside>
-      <main class="main">
-        <div class="toolbar">
-          <div class="toolbar-left">
-            <button id="sidebar-toggle" class="toolbar-icon-button" type="button" aria-label="Toggle sessions">
-              <span aria-hidden="true">☰</span>
-            </button>
-            <label class="top-search">
-              <span class="sr-only">Search timeline</span>
-              <input id="search" type="search" placeholder="Search this session timeline..." />
-            </label>
-          </div>
-          <div class="toolbar-right">
-            <div class="view-switch" data-active="task" role="tablist" aria-label="Panel">
+          <nav class="sidebar-nav" aria-label="Overview">
+            <div class="sidebar-nav-title">Overview</div>
+            <div class="view-switch view-switch-nav" data-active="task" role="tablist" aria-label="Panel">
               <button
                 class="view-option active"
                 type="button"
@@ -76,7 +35,7 @@
                 role="tab"
                 aria-label="Timeline"
               >
-                <span class="view-option-label">Timeline</span>
+                <span class="view-option-label">Dashboard</span>
               </button>
               <button
                 class="view-option"
@@ -92,6 +51,52 @@
                 <span class="view-indicator-label">Timeline</span>
               </span>
             </div>
+          </nav>
+          <div class="sidebar-tools">
+            <div class="sidebar-search-row">
+              <label class="sidebar-search">
+                <span class="sr-only">Search sessions</span>
+                <input id="session-search" type="search" placeholder="Search sessions or tasks" />
+              </label>
+              <button
+                id="parse-tasks"
+                class="sidebar-action"
+                type="button"
+                title="Parse task candidates"
+              >
+                Parse
+              </button>
+              <button
+                id="analyze-tasks"
+                class="sidebar-action"
+                type="button"
+                title="Analyze pending tasks with OpenClaw"
+              >
+                Analyze
+              </button>
+            </div>
+            <div class="sidebar-hint" id="sidebar-hint"></div>
+          </div>
+          <div class="sidebar-section">
+            <div class="sidebar-nav-title">Sessions</div>
+            <div id="sessions" class="session-list"></div>
+          </div>
+          <div class="sidebar-footer">
+            <p>Local timeline viewer. No OpenClaw repo changes required.</p>
+          </div>
+        </aside>
+        <main class="main">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <button id="sidebar-toggle" class="toolbar-icon-button" type="button" aria-label="Toggle sessions">
+              <span aria-hidden="true">☰</span>
+            </button>
+            <label class="top-search">
+              <span class="sr-only">Search timeline</span>
+              <input id="search" type="search" placeholder="Search this session timeline..." />
+            </label>
+          </div>
+          <div class="toolbar-right">
             <button id="cmdk-open" class="toolbar-button" type="button">
               <span class="toolbar-button-icon" aria-hidden="true">Ctrl K</span>
               <span class="toolbar-button-label">Command</span>
@@ -100,6 +105,10 @@
               <span class="toolbar-button-icon" aria-hidden="true">?</span>
               <span class="toolbar-button-label">Shortcuts</span>
             </button>
+            <div class="toolbar-profile" aria-label="Profile">
+              <div class="profile-dot" aria-hidden="true"></div>
+              <div class="profile-name">Local</div>
+            </div>
           </div>
         </div>
         <section class="hero" aria-label="Active session">
@@ -197,6 +206,18 @@
                   <h3>Session snapshot</h3>
                   <p class="muted" id="stats-subtitle">Select a session to populate metrics.</p>
                 </div>
+                <div class="stats-ring-row">
+                  <div id="stats-ring" class="stats-ring" aria-hidden="true">
+                    <div class="stats-avatar" aria-hidden="true">EMC</div>
+                    <div id="stats-ring-label" class="stats-ring-label">0%</div>
+                  </div>
+                  <div class="stats-greeting">
+                    <div id="stats-greeting-title" class="stats-greeting-title">Good day</div>
+                    <div id="stats-greeting-sub" class="stats-greeting-sub">
+                      Pick a session to explore its timeline.
+                    </div>
+                  </div>
+                </div>
                 <div class="stats-grid">
                   <div class="stat-tile">
                     <div class="stat-value" id="stat-events-visible">-</div>
@@ -239,7 +260,8 @@
             <div id="evolution-content"></div>
           </div>
         </section>
-      </main>
+        </main>
+      </div>
     </div>
     <dialog id="cmdk" class="dialog dialog-cmdk">
       <form method="dialog" class="dialog-shell">
