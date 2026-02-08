@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark light" />
+    <script>
+      (() => {
+        const THEME_KEY = "emc_theme";
+        const saved = localStorage.getItem(THEME_KEY);
+        const prefersDark =
+          typeof window !== "undefined" &&
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const theme = saved === "dark" || saved === "light" ? saved : prefersDark ? "dark" : "light";
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
     <title>Evolve My Claw</title>
     <link
       rel="stylesheet"
@@ -96,6 +108,16 @@
             <button id="cmdk-open" class="toolbar-button" type="button">
               <span class="toolbar-button-icon" aria-hidden="true">Ctrl K</span>
               <span class="toolbar-button-label">Command</span>
+            </button>
+            <button
+              id="theme-toggle"
+              class="toolbar-button"
+              type="button"
+              aria-label="Toggle theme"
+              title="Toggle theme (Shift-click to follow system)"
+            >
+              <span class="toolbar-button-icon" aria-hidden="true" id="theme-toggle-icon">Theme</span>
+              <span class="toolbar-button-label" id="theme-toggle-label">Auto</span>
             </button>
             <button id="help-open" class="toolbar-button" type="button">
               <span class="toolbar-button-icon" aria-hidden="true">?</span>

@@ -77,6 +77,9 @@ const evolutionViewEl = document.getElementById("evolution-view");
 const mainEl = document.querySelector(".main");
 const sidebarToggleEl = document.getElementById("sidebar-toggle");
 const cmdkOpenEl = document.getElementById("cmdk-open");
+const themeToggleEl = document.getElementById("theme-toggle");
+const themeToggleIconEl = document.getElementById("theme-toggle-icon");
+const themeToggleLabelEl = document.getElementById("theme-toggle-label");
 const helpOpenEl = document.getElementById("help-open");
 const cmdkDialogEl = document.getElementById("cmdk");
 const cmdkInputEl = document.getElementById("cmdk-input");
@@ -84,6 +87,7 @@ const cmdkResultsEl = document.getElementById("cmdk-results");
 const helpDialogEl = document.getElementById("help");
 const toastEl = document.getElementById("toast");
 
+const THEME_KEY = "emc_theme";
 const SELECTED_TASKS_KEY = "emc_selected_tasks";
 const FILTERS_KEY = "emc_timeline_filters";
 const SIDEBAR_HIDDEN_KEY = "emc_sidebar_hidden";
@@ -96,6 +100,102 @@ const EVOLUTION_ACTIVE_REPORT_KEY = "emc_evolution_active_report";
 const EVOLUTION_SCOPE_DAYS_KEY = "emc_evolution_scope_days";
 const EVOLUTION_AGENT_IDS_KEY = "emc_evolution_agent_ids";
 const EVOLUTION_FOCUS_KEY = "emc_evolution_focus";
+
+function getSystemTheme() {
+  try {
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  } catch {
+    return "dark";
+  }
+}
+
+function getSavedTheme() {
+  try {
+    const v = localStorage.getItem(THEME_KEY);
+    return v === "dark" || v === "light" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function applyTheme(theme) {
+  const next = theme === "dark" || theme === "light" ? theme : getSystemTheme();
+  document.documentElement.dataset.theme = next;
+  return next;
+}
+
+function updateThemeToggle() {
+  if (!themeToggleEl || !themeToggleIconEl || !themeToggleLabelEl) {
+    return;
+  }
+  const saved = getSavedTheme();
+  const active = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  const icon = active === "light" ? "Sun" : "Moon";
+  themeToggleIconEl.textContent = icon;
+  themeToggleLabelEl.textContent = saved ? active[0].toUpperCase() + active.slice(1) : "Auto";
+  themeToggleEl.setAttribute(
+    "aria-label",
+    saved ? `Theme: ${active}. Click to toggle.` : `Theme: auto (${active}). Click to toggle.`
+  );
+}
+
+function setThemeOverride(themeOrNull) {
+  if (themeOrNull === null) {
+    try {
+      localStorage.removeItem(THEME_KEY);
+    } catch {
+      // ignore
+    }
+    applyTheme(getSystemTheme());
+    updateThemeToggle();
+    return;
+  }
+  const next = themeOrNull === "light" ? "light" : "dark";
+  try {
+    localStorage.setItem(THEME_KEY, next);
+  } catch {
+    // ignore
+  }
+  applyTheme(next);
+  updateThemeToggle();
+}
+
+function initThemeToggle() {
+  if (!themeToggleEl) {
+    return;
+  }
+
+  // Align JS state with the head script (or apply if missing).
+  applyTheme(getSavedTheme() ?? document.documentElement.dataset.theme ?? getSystemTheme());
+  updateThemeToggle();
+
+  themeToggleEl.addEventListener("click", (event) => {
+    // Shift-click resets to system preference.
+    if (event && event.shiftKey) {
+      setThemeOverride(null);
+      showToast("Theme: auto");
+      return;
+    }
+    const active = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+    const next = active === "dark" ? "light" : "dark";
+    setThemeOverride(next);
+    showToast(`Theme: ${next}`);
+  });
+
+  try {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    mq.addEventListener("change", () => {
+      if (getSavedTheme() === null) {
+        applyTheme(getSystemTheme());
+        updateThemeToggle();
+      }
+    });
+  } catch {
+    // ignore
+  }
+}
 
 const DEFAULT_FILTERS = [
   "user_message",
@@ -116,6 +216,8 @@ const cmdkState = {
   items: [],
   activeIndex: 0,
 };
+
+initThemeToggle();
 
 function formatTime(ts) {
   const date = new Date(ts);
