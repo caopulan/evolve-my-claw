@@ -7,7 +7,12 @@
     <script>
       (() => {
         const THEME_KEY = "emc_theme";
-        const saved = localStorage.getItem(THEME_KEY);
+        let saved = null;
+        try {
+          saved = localStorage.getItem(THEME_KEY);
+        } catch {
+          saved = null;
+        }
         const prefersDark =
           typeof window !== "undefined" &&
           window.matchMedia &&
