@@ -105,6 +105,69 @@ html[data-theme="light"] {
   --accent-session: #a16207;
 }
 
+/* Light theme should be flat (no gradients). */
+html[data-theme="light"] body {
+  background: var(--paper);
+}
+
+html[data-theme="light"] body::after {
+  background-image: none;
+}
+
+html[data-theme="light"] .sidebar {
+  background: var(--sidebar-bg);
+}
+
+html[data-theme="light"] .sidebar::before {
+  opacity: 0;
+}
+
+html[data-theme="light"] .main::before {
+  background: none;
+}
+
+html[data-theme="light"] .brand-mark {
+  background: rgba(15, 23, 42, 0.04);
+}
+
+html[data-theme="light"] .session-card::before,
+html[data-theme="light"] .session-card::after {
+  opacity: 0;
+}
+
+html[data-theme="light"] .history-toolbar {
+  background: var(--sidebar-bg);
+  backdrop-filter: none;
+}
+
+html[data-theme="light"] .evolution-run,
+html[data-theme="light"] .evo-run {
+  background: var(--ink);
+  color: var(--paper-deep);
+}
+
+html[data-theme="light"] .evo-card,
+html[data-theme="light"] .event,
+html[data-theme="light"] .detail-panel,
+html[data-theme="light"] .evolution-panel,
+html[data-theme="light"] .evo-runner,
+html[data-theme="light"] .evo-report {
+  background: var(--panel);
+}
+
+html[data-theme="light"] .evo-card::before,
+html[data-theme="light"] .evo-runner::before,
+html[data-theme="light"] .evo-report::before,
+html[data-theme="light"] .evo-pane::before {
+  opacity: 0;
+  background-image: none;
+}
+
+html[data-theme="light"] .timeline::before {
+  background: rgba(15, 23, 42, 0.18);
+  opacity: 1;
+}
+
 * {
   box-sizing: border-box;
 }
