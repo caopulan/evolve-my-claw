@@ -541,7 +541,8 @@ export async function getTasks(params?: {
   const stateDir = params?.stateDir ?? resolveOpenClawStateDir();
   const tasks = await loadTaskRecords(stateDir);
   const sessionKey = params?.sessionKey?.trim();
-  const filtered = sessionKey ? tasks.filter((task) => task.sessionKey === sessionKey) : tasks;
+  const nonEmpty = tasks.filter((task) => Array.isArray(task.toolCalls) && task.toolCalls.length > 0);
+  const filtered = sessionKey ? nonEmpty.filter((task) => task.sessionKey === sessionKey) : nonEmpty;
   return filtered.sort((a, b) => a.startTs - b.startTs);
 }
 

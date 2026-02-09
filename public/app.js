@@ -3355,6 +3355,9 @@ async function loadTasks() {
       if (!task || typeof task.sessionKey !== "string") {
         return;
       }
+      if (!Array.isArray(task.toolCalls) || task.toolCalls.length === 0) {
+        return;
+      }
       if (typeof task.taskId === "string") {
         byId.set(task.taskId, task);
       }

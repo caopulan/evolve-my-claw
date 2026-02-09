@@ -5,6 +5,19 @@ import type { TaskCandidateRecord } from "./task-parser.js";
 
 export type TaskRecord = TaskCandidateRecord;
 
+function isNonEmptyTaskRecord(record: TaskRecord | undefined | null): record is TaskRecord {
+  if (!record || typeof record !== "object") {
+    return false;
+  }
+  if (!record.taskId) {
+    return false;
+  }
+  if (!Array.isArray(record.toolCalls) || record.toolCalls.length === 0) {
+    return false;
+  }
+  return true;
+}
+
 export function resolveTaskStorePath(stateDir = resolveOpenClawStateDir()): string {
   return `${resolveTelemetryDir(stateDir)}/tasks.jsonl`;
 }
@@ -77,7 +90,7 @@ export async function loadTaskSessionIndex(
     }
     try {
       const parsed = JSON.parse(trimmed) as TaskRecord;
-      if (parsed?.taskId) {
+      if (isNonEmptyTaskRecord(parsed)) {
         total += 1;
         if (typeof parsed.sessionKey === "string" && parsed.sessionKey.trim()) {
           sessionKeys.add(parsed.sessionKey.trim());
