@@ -2018,11 +2018,20 @@ body::after {
   z-index: 1;
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 15px;
+  font-size: 11px;
   letter-spacing: 0.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.session-subline {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .session-meta {
@@ -2030,6 +2039,9 @@ body::after {
   z-index: 1;
   font-size: 12px;
   color: rgba(242, 245, 249, 0.65);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .task-list {

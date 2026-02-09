@@ -1592,10 +1592,14 @@ function renderSessions() {
     meta.className = "session-meta";
     const tasksCount = state.tasksLoaded ? (state.tasksBySession.get(session.key) || []).length : null;
     meta.textContent = formatSessionMeta(session, tasksCount);
+
+    const subline = document.createElement("div");
+    subline.className = "session-subline";
+    subline.appendChild(providerBadge);
+    subline.appendChild(meta);
     textWrap.appendChild(title);
-    textWrap.appendChild(meta);
+    textWrap.appendChild(subline);
     card.appendChild(toggle);
-    card.appendChild(providerBadge);
     card.appendChild(textWrap);
     card.addEventListener("click", () => {
       state.focusedTaskId = null;
