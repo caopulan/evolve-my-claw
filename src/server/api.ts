@@ -9,10 +9,28 @@ import { capturedEventsToTimeline, loadCapturedAgentEvents } from "../ingest/age
 import { resolveOpenClawStateDir } from "../paths.js";
 import { loadConfig } from "../config.js";
 import { EVOLUTION_AGENT_ID } from "../evolution/constants.js";
-import { loadTaskRecords, type TaskRecord } from "../tasks/task-store.js";
+import { loadTaskRecords, loadTaskSessionIndex, resolveTaskStorePath, type TaskRecord } from "../tasks/task-store.js";
 import { loadAnalysisRecords, type TaskAnalysisRecord } from "../tasks/analysis-store.js";
 
 const transcriptCache = new Map<string, { mtimeMs: number; events: TimelineEvent[] }>();
+let taskSessionIndexCache:
+  | { mtimeMs: number; size: number; total: number; sessionKeys: Set<string> }
+  | null = null;
+
+async function loadTaskSessionIndexCached(stateDir: string): Promise<{ total: number; sessionKeys: Set<string> }> {
+  const filePath = resolveTaskStorePath(stateDir);
+  if (!fs.existsSync(filePath)) {
+    taskSessionIndexCache = null;
+    return { total: 0, sessionKeys: new Set() };
+  }
+  const stat = fs.statSync(filePath);
+  if (taskSessionIndexCache && taskSessionIndexCache.mtimeMs === stat.mtimeMs && taskSessionIndexCache.size === stat.size) {
+    return { total: taskSessionIndexCache.total, sessionKeys: taskSessionIndexCache.sessionKeys };
+  }
+  const { total, sessionKeys } = await loadTaskSessionIndex(stateDir);
+  taskSessionIndexCache = { mtimeMs: stat.mtimeMs, size: stat.size, total, sessionKeys };
+  return { total, sessionKeys };
+}
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") {
@@ -366,9 +384,22 @@ function buildSubagentEvent(params: {
   };
 }
 
-export function getSessions(stateDir = resolveOpenClawStateDir()): SessionIndexEntry[] {
+export async function getSessions(params?: {
+  stateDir?: string;
+  includeEmpty?: boolean;
+}): Promise<SessionIndexEntry[]> {
+  const stateDir = params?.stateDir ?? resolveOpenClawStateDir();
   const excluded = resolveExcludedAgentIds(stateDir);
-  return filterSessionsByAgent(listSessions(stateDir), excluded);
+  const sessions = filterSessionsByAgent(listSessions(stateDir), excluded);
+  if (params?.includeEmpty) {
+    return sessions;
+  }
+  const { total, sessionKeys } = await loadTaskSessionIndexCached(stateDir);
+  // If tasks haven't been generated yet, don't hide sessions entirely.
+  if (total === 0) {
+    return sessions;
+  }
+  return sessions.filter((session) => sessionKeys.has(session.key));
 }
 
 async function loadTranscriptEvents(params: {

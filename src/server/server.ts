@@ -60,8 +60,14 @@ export async function startServer(params: {
     return Math.floor(num);
   };
 
-  app.get("/api/sessions", async () => {
-    return { sessions: getSessions(params.stateDir) };
+  app.get("/api/sessions", async (request) => {
+    const query = (request.query ?? {}) as { includeEmpty?: unknown };
+    const includeEmptyRaw = query.includeEmpty;
+    const includeEmpty =
+      includeEmptyRaw === true ||
+      includeEmptyRaw === "true" ||
+      includeEmptyRaw === "1";
+    return { sessions: await getSessions({ stateDir: params.stateDir, includeEmpty }) };
   });
 
   app.get("/api/timeline", async (request, reply) => {

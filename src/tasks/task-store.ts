@@ -59,6 +59,37 @@ export async function loadTaskIndex(stateDir = resolveOpenClawStateDir()): Promi
   return ids;
 }
 
+export async function loadTaskSessionIndex(
+  stateDir = resolveOpenClawStateDir(),
+): Promise<{ sessionKeys: Set<string>; total: number }> {
+  const filePath = resolveTaskStorePath(stateDir);
+  if (!fs.existsSync(filePath)) {
+    return { sessionKeys: new Set(), total: 0 };
+  }
+  const sessionKeys = new Set<string>();
+  let total = 0;
+  const stream = fs.createReadStream(filePath, { encoding: "utf8" });
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+  for await (const line of rl) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+    try {
+      const parsed = JSON.parse(trimmed) as TaskRecord;
+      if (parsed?.taskId) {
+        total += 1;
+        if (typeof parsed.sessionKey === "string" && parsed.sessionKey.trim()) {
+          sessionKeys.add(parsed.sessionKey.trim());
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return { sessionKeys, total };
+}
+
 export function appendTaskRecords(records: TaskRecord[], stateDir = resolveOpenClawStateDir()): number {
   if (records.length === 0) {
     return 0;

@@ -573,33 +573,85 @@ function formatSessionProviderLabel(value) {
   return SESSION_PROVIDER_LABELS[normalized] || normalized.slice(0, 1).toUpperCase() + normalized.slice(1);
 }
 
+function isNumericId(value) {
+  const text = String(value ?? "").trim();
+  return /^[0-9]{8,}$/.test(text);
+}
+
+function truncateMiddleText(value, max = 26) {
+  const text = String(value ?? "");
+  if (text.length <= max) {
+    return text;
+  }
+  const head = Math.max(6, Math.floor((max - 1) / 2));
+  const tail = Math.max(4, max - head - 1);
+  return `${text.slice(0, head)}…${text.slice(text.length - tail)}`;
+}
+
+function extractHashChannel(value) {
+  const text = String(value ?? "");
+  const matches = text.match(/#[A-Za-z0-9_-]{1,80}/g);
+  if (!matches || matches.length === 0) {
+    return "";
+  }
+  return matches[matches.length - 1] || "";
+}
+
 function formatSessionChannelLabel(session) {
   const info = session?.keyInfo && typeof session.keyInfo === "object" ? session.keyInfo : null;
   const meta = info?.meta && typeof info.meta === "object" ? info.meta : null;
+  const provider = typeof info?.provider === "string" ? info.provider.trim().toLowerCase() : "";
   const space = typeof meta?.space === "string" ? meta.space.trim() : "";
   const groupChannel = typeof meta?.groupChannel === "string" ? meta.groupChannel.trim() : "";
   const subject = typeof meta?.subject === "string" ? meta.subject.trim() : "";
-
-  if (space && groupChannel) {
-    if (groupChannel.startsWith("#")) {
-      return `${space}${groupChannel}`;
-    }
-    return `${space}#${groupChannel}`;
-  }
-  if (groupChannel) {
-    return groupChannel;
-  }
-  if (subject) {
-    return subject;
-  }
-
   const originLabel = typeof meta?.originLabel === "string" ? meta.originLabel.trim() : "";
-  if (originLabel) {
-    return originLabel;
+  const displayName = typeof session?.displayName === "string" ? session.displayName.trim() : "";
+
+  if (provider === "discord") {
+    const channel =
+      groupChannel ||
+      extractHashChannel(originLabel) ||
+      extractHashChannel(displayName);
+    const spaceIsId = isNumericId(space);
+    const channelLabel = channel
+      ? channel.startsWith("#")
+        ? channel
+        : `#${channel}`
+      : "";
+
+    if (channelLabel) {
+      const head = !spaceIsId && space ? (channelLabel.startsWith("#") ? `${space}${channelLabel}` : `${space}#${channelLabel}`) : channelLabel;
+      return subject ? `${head} · ${subject}` : head;
+    }
+    if (subject) {
+      return subject;
+    }
+    if (originLabel) {
+      return originLabel;
+    }
+  } else {
+    if (space && groupChannel) {
+      if (groupChannel.startsWith("#")) {
+        return `${space}${groupChannel}`;
+      }
+      return `${space}#${groupChannel}`;
+    }
+    if (groupChannel) {
+      return groupChannel;
+    }
+    if (subject) {
+      return subject;
+    }
+    if (originLabel) {
+      return originLabel;
+    }
   }
 
   const peerId = typeof info?.peerId === "string" ? info.peerId.trim() : "";
   if (peerId) {
+    if (provider === "discord" && isNumericId(peerId)) {
+      return `#${truncateMiddleText(peerId, 22)}`;
+    }
     return truncateText(peerId, 42);
   }
 
