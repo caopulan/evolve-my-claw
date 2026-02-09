@@ -1953,8 +1953,12 @@ function renderDetailPanel() {
     return;
   }
 
-  setMarkdown(detailTitleEl, event.summary || "(no summary)");
-  detailSubtitleEl.textContent = `${event.kind.replace(/_/g, " ")} · ${formatTime(event.ts)}`;
+  const headline = formatEventHeaderTitle(event);
+  const summaryLine = formatEventCardSummary(event);
+  setMarkdown(detailTitleEl, headline || "(no summary)");
+  const summaryTail =
+    summaryLine && summaryLine !== headline ? ` · ${truncateText(summaryLine, 140)}` : "";
+  detailSubtitleEl.textContent = `${event.kind.replace(/_/g, " ")} · ${formatTime(event.ts)}${summaryTail}`;
 
   const actions = document.createElement("div");
   actions.className = "detail-actions";
@@ -3112,9 +3116,6 @@ function collectEventChips(event, hasChildren) {
     if (isError) {
       chips.push({ label: "error", tone: "danger" });
     }
-    if (typeof event.toolName === "string" && event.toolName) {
-      chips.push({ label: event.toolName, tone: "accent" });
-    }
   }
 
   if (event.kind === "assistant_message") {
@@ -3161,6 +3162,278 @@ function collectEventChips(event, hasChildren) {
   return chips;
 }
 
+function tryParseJson(value) {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) {
+    return null;
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeToolArgs(value) {
+  if (typeof value === "string") {
+    return tryParseJson(value) ?? value;
+  }
+  return value;
+}
+
+function stringifyToolArgValue(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  if (typeof value === "boolean") {
+    return value ? "true" : "false";
+  }
+  return "";
+}
+
+function formatToolArgsSummary(args) {
+  const normalized = normalizeToolArgs(args);
+  if (!normalized) {
+    return "";
+  }
+  if (typeof normalized === "string") {
+    return truncateText(normalized, 120);
+  }
+  if (Array.isArray(normalized)) {
+    return normalized.length ? `list(${normalized.length})` : "";
+  }
+  if (typeof normalized !== "object") {
+    return truncateText(String(normalized), 120);
+  }
+
+  const record = normalized;
+  const pick = (key) => stringifyToolArgValue(record[key]);
+  const parts = [];
+  const priority = [
+    "file_path",
+    "filePath",
+    "path",
+    "sessionKey",
+    "jobId",
+    "action",
+    "label",
+    "task",
+    "command",
+    "url",
+    "query",
+    "q",
+    "limit",
+    "agentId",
+    "id",
+    "name",
+    "to",
+    "channel",
+  ];
+  priority.forEach((key) => {
+    if (parts.length >= 2) {
+      return;
+    }
+    const val = pick(key);
+    if (!val) {
+      return;
+    }
+    if (key === "command") {
+      parts.push(truncateText(val, 120));
+      return;
+    }
+    if (key === "file_path" || key === "filePath" || key === "path") {
+      parts.push(truncateText(val, 120));
+      return;
+    }
+    parts.push(`${key}=${truncateText(val, 80)}`);
+  });
+
+  if (!parts.length) {
+    for (const [key, value] of Object.entries(record)) {
+      if (parts.length >= 2) {
+        break;
+      }
+      if (key === "content" || key === "patch" || key === "payload") {
+        continue;
+      }
+      const val = stringifyToolArgValue(value);
+      if (val) {
+        parts.push(`${key}=${truncateText(val, 80)}`);
+      }
+    }
+  }
+
+  if (!parts.length && typeof record.content === "string") {
+    parts.push(`content(${record.content.length})`);
+  }
+
+  return parts.join(" · ");
+}
+
+function splitAuthorPrefix(text) {
+  const raw = String(text ?? "").trim();
+  if (!raw) {
+    return null;
+  }
+  const match = raw.match(/^([^:\n]{1,64}):\s*([\s\S]*)$/);
+  if (!match?.[1]) {
+    return null;
+  }
+  const rest = (match[2] ?? "").trim();
+  if (!rest) {
+    return null;
+  }
+  const authorRaw = match[1].trim();
+  const author = authorRaw.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  if (!author) {
+    return null;
+  }
+  return { author, text: rest };
+}
+
+function formatEventIcon(event) {
+  switch (event.kind) {
+    case "user_message":
+      return "U";
+    case "assistant_message":
+      return "A";
+    case "tool":
+      return "T";
+    case "subagent_run":
+      return "S";
+    case "subagent_result":
+      return "R";
+    case "agent_event":
+      return "G";
+    case "model_change":
+      return "M";
+    case "thinking_level_change":
+      return "K";
+    case "compaction":
+      return "C";
+    case "branch_summary":
+      return "B";
+    case "session_info":
+      return "I";
+    default:
+      return "?";
+  }
+}
+
+function formatEventHeaderTitle(event) {
+  const kind = event.kind;
+  if (kind === "tool") {
+    const name = typeof event.toolName === "string" ? event.toolName.trim() : "";
+    return name ? `Tool · ${name}` : "Tool";
+  }
+  if (kind === "user_message") {
+    const details = event?.details ?? {};
+    const raw = typeof details.text === "string" ? details.text : event.summary || "";
+    const cleaned = stripLeadingTimestamp(raw);
+    const split = splitAuthorPrefix(cleaned);
+    return split?.author ? `User · ${split.author}` : "User";
+  }
+  if (kind === "assistant_message") {
+    const summary = String(event.summary ?? "").trim();
+    if (summary.startsWith("Thinking:")) {
+      return "Thinking";
+    }
+    return "Assistant";
+  }
+  if (kind === "subagent_run") {
+    const label = String(event.summary ?? "").trim();
+    return label ? `Subagent · ${label}` : "Subagent";
+  }
+  if (kind === "subagent_result") {
+    const label = String(event.summary ?? "").replace(/^Subagent result:\s*/i, "").trim();
+    return label ? `Result · ${label}` : "Result";
+  }
+  if (kind === "model_change") {
+    const summary = String(event.summary ?? "").replace(/^Model:\s*/i, "").trim();
+    return summary ? `Model · ${summary}` : "Model";
+  }
+  if (kind === "thinking_level_change") {
+    const summary = String(event.summary ?? "").replace(/^Thinking:\s*/i, "").trim();
+    return summary ? `Thinking · ${summary}` : "Thinking";
+  }
+  if (kind === "agent_event") {
+    const stream = typeof event?.details?.stream === "string" ? event.details.stream.trim() : "";
+    return stream ? `Agent · ${stream}` : "Agent";
+  }
+  if (kind === "compaction") {
+    return "Compaction";
+  }
+  if (kind === "branch_summary") {
+    return "Branch";
+  }
+  if (kind === "session_info") {
+    return "Session info";
+  }
+  return kind.replace(/_/g, " ");
+}
+
+function formatEventCardSummary(event) {
+  const kind = event.kind;
+  const details = event?.details ?? {};
+
+  if (kind === "tool") {
+    const toolName = typeof event.toolName === "string" ? event.toolName.trim() : "";
+    const argsSummary = formatToolArgsSummary(details?.args);
+    if (argsSummary) {
+      return argsSummary;
+    }
+    const rawSummary = String(event.summary ?? "");
+    if (toolName && rawSummary.toLowerCase().startsWith(toolName.toLowerCase())) {
+      const stripped = rawSummary.slice(toolName.length).trim();
+      return stripped || rawSummary;
+    }
+    return rawSummary;
+  }
+
+  if (kind === "user_message") {
+    const raw = typeof details.text === "string" ? details.text : event.summary || "";
+    const cleaned = stripLeadingTimestamp(raw);
+    const split = splitAuthorPrefix(cleaned);
+    const text = split?.text ?? cleaned;
+    return truncateText(text, 180);
+  }
+
+  if (kind === "assistant_message") {
+    const summary = String(event.summary ?? "").trim();
+    if (summary.startsWith("Thinking:")) {
+      return summary.replace(/^Thinking:\s*/i, "").trim();
+    }
+    const text = typeof details.text === "string" ? details.text : summary;
+    return truncateText(text, 220);
+  }
+
+  if (kind === "subagent_result") {
+    const text = typeof details.text === "string" ? details.text : "";
+    const cleaned = stripLeadingTimestamp(text);
+    if (cleaned) {
+      return truncateText(cleaned, 220);
+    }
+  }
+
+  if (kind === "subagent_run") {
+    const child = typeof details?.childSessionKey === "string" ? details.childSessionKey.trim() : "";
+    if (child) {
+      return truncateText(`child=${child}`, 220);
+    }
+  }
+
+  return String(event.summary ?? "").trim();
+}
+
 function renderEventNode(event, indexRef, depth = 0) {
   const eventId = getEventKey(event);
   const wrapper = document.createElement("div");
@@ -3181,18 +3454,27 @@ function renderEventNode(event, indexRef, depth = 0) {
 
   const header = document.createElement("div");
   header.className = "event-header";
-  const kind = document.createElement("div");
-  kind.className = "event-kind";
-  kind.textContent = event.kind.replace(/_/g, " ");
+  const headLeft = document.createElement("div");
+  headLeft.className = "event-head-left";
+  const icon = document.createElement("div");
+  icon.className = "event-icon";
+  icon.textContent = formatEventIcon(event);
+  icon.setAttribute("data-kind", event.kind);
+  const title = document.createElement("div");
+  title.className = "event-title";
+  title.textContent = formatEventHeaderTitle(event);
+  title.setAttribute("title", title.textContent);
+  headLeft.appendChild(icon);
+  headLeft.appendChild(title);
   const time = document.createElement("div");
   time.className = "event-time";
   time.textContent = formatTime(event.ts);
-  header.appendChild(kind);
+  header.appendChild(headLeft);
   header.appendChild(time);
 
   const summary = document.createElement("div");
   summary.className = "event-summary";
-  setMarkdown(summary, event.summary || "(no summary)");
+  setMarkdown(summary, formatEventCardSummary(event) || "(no summary)");
 
   card.appendChild(header);
   card.appendChild(summary);

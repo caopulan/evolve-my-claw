@@ -2610,7 +2610,7 @@ body::after {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(340px, 4fr);
+  grid-template-columns: minmax(0, 3fr) minmax(420px, 7fr);
   gap: 24px;
   align-items: stretch;
   flex: 1;
@@ -2794,12 +2794,38 @@ body::after {
   gap: 12px;
 }
 
-.event-kind {
+.event-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.event-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink-soft);
+  flex: 0 0 auto;
+}
+
+.event-title {
+  min-width: 0;
   font-size: 11px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   font-weight: 700;
   color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .event-time {
