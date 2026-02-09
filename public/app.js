@@ -13,6 +13,7 @@ const state = {
   mainView: "task",
   analysesByTask: new Map(),
   analysesLoaded: false,
+  analysisRuns: [],
   filters: new Set([
     "user_message",
     "assistant_message",
@@ -55,6 +56,9 @@ const state = {
 const appEl = document.querySelector(".app");
 const sessionsEl = document.getElementById("sessions");
 const sidebarHintEl = document.getElementById("sidebar-hint");
+const sidebarAnalysisEl = document.getElementById("sidebar-analysis");
+const analysisRunsEl = document.getElementById("analysis-runs");
+const analysisRunCountEl = document.getElementById("analysis-run-count");
 const sessionSearchEl = document.getElementById("session-search");
 const timelineEl = document.getElementById("timeline");
 const sessionTitleEl = document.getElementById("session-title");
@@ -236,6 +240,23 @@ function formatClockTime(ts) {
   } catch {
     return date.toLocaleTimeString();
   }
+}
+
+function formatDurationCompact(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value) || value < 0) {
+    return "";
+  }
+  if (value < 1000) {
+    return `${Math.round(value)}ms`;
+  }
+  const seconds = value / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remain = Math.round(seconds - minutes * 60);
+  return `${minutes}m${String(remain).padStart(2, "0")}s`;
 }
 
 function createEmptyState(message) {
@@ -1642,6 +1663,107 @@ function syncSidebarSearchInput() {
   }
 }
 
+function formatAnalysisRunSummary(run) {
+  if (!run || typeof run !== "object") {
+    return "";
+  }
+  if (run.status === "running") {
+    return "Running…";
+  }
+  if (run.status === "failed") {
+    return run.error ? `Failed: ${run.error}` : "Failed.";
+  }
+  const result = run.result && typeof run.result === "object" ? run.result : null;
+  if (!result) {
+    return "Completed.";
+  }
+  const analyzed = Number.isFinite(result.analyzed) ? result.analyzed : "?";
+  const selected = Number.isFinite(result.selected) ? result.selected : "?";
+  const failed = Number.isFinite(result.failed) ? result.failed : "?";
+  const appended = Number.isFinite(result.appended) ? result.appended : "?";
+  const parts = [`${analyzed}/${selected} analyzed`, `failed ${failed}`, `appended ${appended}`];
+  if (typeof result.note === "string" && result.note.trim()) {
+    parts.push(result.note.trim());
+  }
+  return parts.join(" · ");
+}
+
+function renderAnalysisRuns() {
+  if (!sidebarAnalysisEl || !analysisRunsEl) {
+    return;
+  }
+  const runs = Array.isArray(state.analysisRuns) ? state.analysisRuns : [];
+  sidebarAnalysisEl.hidden = runs.length === 0;
+  if (analysisRunCountEl) {
+    analysisRunCountEl.textContent = runs.length ? String(runs.length) : "";
+  }
+  analysisRunsEl.innerHTML = "";
+  if (!runs.length) {
+    return;
+  }
+
+  runs.slice(0, 8).forEach((run) => {
+    const row = document.createElement("div");
+    row.className = "analysis-run-row";
+
+    const top = document.createElement("div");
+    top.className = "analysis-run-top";
+
+    const title = document.createElement("div");
+    title.className = "analysis-run-title";
+    title.textContent = "Analyze tasks";
+
+    const meta = document.createElement("div");
+    meta.className = "analysis-run-meta";
+    const startedAt = typeof run.startedAt === "number" ? run.startedAt : null;
+    const endedAt = typeof run.endedAt === "number" ? run.endedAt : null;
+    const timeLabel = startedAt != null ? formatClockTime(startedAt) : "";
+    const duration = endedAt != null && startedAt != null ? formatDurationCompact(endedAt - startedAt) : "";
+    meta.textContent = [timeLabel, duration].filter(Boolean).join(" · ");
+
+    top.appendChild(title);
+    top.appendChild(meta);
+    row.appendChild(top);
+
+    const statusWrap = document.createElement("div");
+    statusWrap.className = "analysis-status";
+    const pill = document.createElement("span");
+    const status = typeof run.status === "string" ? run.status : "unknown";
+    pill.className = `analysis-pill status-${status}`;
+    pill.textContent = status;
+    statusWrap.appendChild(pill);
+    row.appendChild(statusWrap);
+
+    const summary = document.createElement("div");
+    summary.className = "analysis-run-summary";
+    summary.textContent = formatAnalysisRunSummary(run);
+    row.appendChild(summary);
+
+    analysisRunsEl.appendChild(row);
+  });
+}
+
+function startTaskAnalysisRun() {
+  const runId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const record = { runId, status: "running", startedAt: Date.now() };
+  const existing = Array.isArray(state.analysisRuns) ? state.analysisRuns : [];
+  state.analysisRuns = [record, ...existing].slice(0, 20);
+  renderAnalysisRuns();
+  return runId;
+}
+
+function finishTaskAnalysisRun(runId, update) {
+  const runs = Array.isArray(state.analysisRuns) ? state.analysisRuns : [];
+  const idx = runs.findIndex((run) => run && run.runId === runId);
+  if (idx === -1) {
+    return;
+  }
+  const previous = runs[idx] && typeof runs[idx] === "object" ? runs[idx] : {};
+  runs[idx] = { ...previous, ...update, endedAt: Date.now() };
+  state.analysisRuns = runs;
+  renderAnalysisRuns();
+}
+
 function renderEvolutionSidebar() {
   sessionsEl.innerHTML = "";
   const previousActiveReportId = state.evolutionActiveReportId;
@@ -1762,6 +1884,7 @@ function renderSidebar() {
   } else {
     renderSessions();
   }
+  renderAnalysisRuns();
 }
 
 function updateActiveSessionCard() {
@@ -3902,4 +4025,6 @@ window.showToast = showToast;
 window.loadSessions = loadSessions;
 window.loadTasks = loadTasks;
 window.loadAnalyses = loadAnalyses;
+window.startTaskAnalysisRun = startTaskAnalysisRun;
+window.finishTaskAnalysisRun = finishTaskAnalysisRun;
 renderTimeline();

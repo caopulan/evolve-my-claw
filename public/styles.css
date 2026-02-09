@@ -324,6 +324,64 @@ body::after {
   letter-spacing: 0.08em;
 }
 
+.sidebar-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.analysis-run-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.analysis-run-row {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analysis-run-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.analysis-run-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sidebar-ink);
+}
+
+.analysis-run-meta {
+  font-size: 10px;
+  color: var(--sidebar-placeholder);
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.analysis-run-summary {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--sidebar-ink);
+  opacity: 0.72;
+}
+
+.analysis-pill.status-running {
+  background: rgba(127, 201, 255, 0.16);
+  color: #7fc9ff;
+}
+
 .brand {
   display: flex;
   align-items: center;

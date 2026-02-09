@@ -72,6 +72,7 @@
       return;
     }
     running = true;
+    const runId = typeof window.startTaskAnalysisRun === "function" ? window.startTaskAnalysisRun() : null;
 
     const previousLabel = analyzeButton.textContent;
     analyzeButton.disabled = true;
@@ -95,6 +96,9 @@
           payload && typeof payload.error === "string"
             ? payload.error
             : `Analyze failed (HTTP ${res.status}).`;
+        if (runId && typeof window.finishTaskAnalysisRun === "function") {
+          window.finishTaskAnalysisRun(runId, { status: "failed", error: message });
+        }
         showAnalyzeDialog(`Analyze failed.\n\n${message}`);
         if (typeof window.showToast === "function") {
           window.showToast("Analyze failed.");
@@ -102,8 +106,14 @@
         return;
       }
 
-      await refresh();
-
+      if (runId && typeof window.finishTaskAnalysisRun === "function") {
+        window.finishTaskAnalysisRun(runId, { status: "success", result: payload?.result });
+      }
+      try {
+        await refresh();
+      } catch {
+        // ignore refresh failures; analysis run already succeeded.
+      }
       const resultText = formatAnalyzeResult(payload?.result);
       showAnalyzeDialog(resultText || "Analyze completed.");
       if (typeof window.showToast === "function") {
@@ -111,6 +121,9 @@
       }
     } catch (err) {
       const message = err && typeof err.message === "string" ? err.message : String(err ?? "unknown error");
+      if (runId && typeof window.finishTaskAnalysisRun === "function") {
+        window.finishTaskAnalysisRun(runId, { status: "failed", error: message });
+      }
       showAnalyzeDialog(`Analyze failed.\n\n${message}`);
       if (typeof window.showToast === "function") {
         window.showToast("Analyze failed.");
