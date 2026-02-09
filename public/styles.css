@@ -484,6 +484,32 @@ body::after {
   z-index: 1;
 }
 
+.session-provider {
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(10, 14, 20, 0.35);
+  z-index: 1;
+  flex: 0 0 auto;
+}
+
+.session-provider svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.session-provider[data-provider="discord"] svg {
+  color: #5865f2;
+}
+
+.session-provider[data-provider="telegram"] svg {
+  color: #2aabee;
+}
+
 .evolution-controls {
   margin: 16px 0 8px;
 }

@@ -573,6 +573,12 @@ function formatSessionProviderLabel(value) {
   return SESSION_PROVIDER_LABELS[normalized] || normalized.slice(0, 1).toUpperCase() + normalized.slice(1);
 }
 
+function sessionProvider(session) {
+  const info = session?.keyInfo && typeof session.keyInfo === "object" ? session.keyInfo : null;
+  const provider = typeof info?.provider === "string" ? info.provider.trim().toLowerCase() : "";
+  return provider || "";
+}
+
 function isNumericId(value) {
   const text = String(value ?? "").trim();
   return /^[0-9]{8,}$/.test(text);
@@ -595,6 +601,31 @@ function extractHashChannel(value) {
     return "";
   }
   return matches[matches.length - 1] || "";
+}
+
+function stripIdSuffix(text) {
+  const raw = String(text ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  return raw.replace(/\s*id:\s*\d+\s*$/i, "").trim();
+}
+
+function formatSessionCardTitle(session) {
+  const provider = sessionProvider(session);
+  if (provider === "discord" || provider === "telegram") {
+    const channel = formatSessionChannelLabel(session);
+    if (channel) {
+      return channel;
+    }
+    const info = session?.keyInfo && typeof session.keyInfo === "object" ? session.keyInfo : null;
+    const meta = info?.meta && typeof info.meta === "object" ? info.meta : null;
+    const originLabel = stripIdSuffix(meta?.originLabel);
+    if (originLabel) {
+      return originLabel;
+    }
+  }
+  return formatSessionTitle(session) || session.displayName || session.label || session.key;
 }
 
 function formatSessionChannelLabel(session) {
@@ -628,6 +659,13 @@ function formatSessionChannelLabel(session) {
     }
     if (originLabel) {
       return originLabel;
+    }
+  } else if (provider === "telegram") {
+    if (subject) {
+      return stripIdSuffix(subject);
+    }
+    if (originLabel) {
+      return stripIdSuffix(originLabel);
     }
   } else {
     if (space && groupChannel) {
@@ -1529,11 +1567,26 @@ function renderSessions() {
       event.stopPropagation();
       toggleSessionExpanded(session.key);
     });
+
+    const provider = sessionProvider(session);
+    const providerBadge = document.createElement("div");
+    providerBadge.className = "session-provider";
+    providerBadge.hidden = !(provider === "discord" || provider === "telegram");
+    providerBadge.setAttribute("data-provider", provider);
+    providerBadge.setAttribute("aria-hidden", "true");
+    if (provider === "discord") {
+      providerBadge.innerHTML =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.5 4.6a16.5 16.5 0 0 0-4.1-1.3c-.2.4-.4.8-.6 1.2a15.4 15.4 0 0 0-4.6 0c-.2-.4-.4-.8-.6-1.2c-1.4.3-2.8.7-4.1 1.3C1.4 8.1.8 11.5 1.1 14.8c1.6 1.2 3.2 1.9 4.9 2.4c.4-.5.8-1.1 1.1-1.6c-.6-.2-1.1-.5-1.6-.8c.1-.1.3-.2.4-.3c3.1 1.5 6.5 1.5 9.6 0c.1.1.3.2.4.3c-.5.3-1 .6-1.6.8c.3.6.7 1.1 1.1 1.6c1.7-.5 3.4-1.2 4.9-2.4c.4-3.7-.7-7-2.3-10.2ZM8.3 13.7c-1 0-1.8-.9-1.8-2s.8-2 1.8-2s1.8.9 1.8 2s-.8 2-1.8 2Zm7.4 0c-1 0-1.8-.9-1.8-2s.8-2 1.8-2s1.8.9 1.8 2s-.8 2-1.8 2Z"/></svg>';
+    } else if (provider === "telegram") {
+      providerBadge.innerHTML =
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9.7 14.8 9.4 19c.5 0 .7-.2.9-.4l2.2-2.1 4.6 3.4c.8.4 1.4.2 1.6-.8l2.9-13.7c.3-1.2-.4-1.7-1.2-1.4L2.3 10c-1.2.5-1.2 1.2-.2 1.5l4.5 1.4L18.7 5.7c.6-.4 1.2-.2.7.2z"/></svg>';
+    }
+
     const textWrap = document.createElement("div");
     textWrap.className = "session-text";
     const title = document.createElement("div");
     title.className = "session-title";
-    title.textContent = formatSessionTitle(session) || session.displayName || session.label || session.key;
+    title.textContent = formatSessionCardTitle(session);
     title.setAttribute("title", session.key);
     const meta = document.createElement("div");
     meta.className = "session-meta";
@@ -1542,6 +1595,7 @@ function renderSessions() {
     textWrap.appendChild(title);
     textWrap.appendChild(meta);
     card.appendChild(toggle);
+    card.appendChild(providerBadge);
     card.appendChild(textWrap);
     card.addEventListener("click", () => {
       state.focusedTaskId = null;
