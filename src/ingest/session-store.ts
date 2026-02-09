@@ -141,5 +141,7 @@ export function listSessions(stateDir = resolveOpenClawStateDir()): SessionIndex
       });
     }
   }
-  return sessions.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  const toUpdatedAt = (value: number | undefined): number =>
+    typeof value === "number" && Number.isFinite(value) ? value : Number.POSITIVE_INFINITY;
+  return sessions.sort((a, b) => toUpdatedAt(a.updatedAt) - toUpdatedAt(b.updatedAt));
 }
